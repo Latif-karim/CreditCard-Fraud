@@ -1,0 +1,24 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Environment variables
+.env
+.env.local
+# Node
+node_modules/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Next.js
+.next/
+
+
+# Flask
+instance/
+
+# Logs
+*.log
