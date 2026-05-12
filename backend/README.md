@@ -50,3 +50,9 @@ If missing, the API falls back to heuristic scoring.
 - Add SMTP/SendGrid in `app/services/alerts.py`
 - Add proper card/token storage strategy (never store CVV)
 - Add tests for all scoring and auth flows
+
+
+
+Download Dataset Here: https://www.kaggle.com/datasets/mlg-ulb/creditcardfraud
+
+Paste Dataset into backend/ml/data directory
