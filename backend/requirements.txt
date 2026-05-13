@@ -11,3 +11,4 @@ imbalanced-learn
 joblib
 numpy
 PyJWT
+flask-cors

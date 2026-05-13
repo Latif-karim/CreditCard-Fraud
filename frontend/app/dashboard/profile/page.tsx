@@ -1,0 +1,136 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { KeyRound, ShieldCheck, Smartphone } from "lucide-react";
+
+import { AppShell } from "@/components/app-shell";
+import { fetchWithAuth, patchWithAuth, postWithAuth } from "@/lib/api";
+
+type Me = { id: number; email: string; full_name: string | null; role: string; email_verified: boolean; two_factor_enabled: boolean };
+type Session = { id: number; device_label: string; ip_address: string | null; last_seen: string; is_current: boolean };
+
+export default function ProfilePage() {
+  const [me, setMe] = useState<Me | null>(null);
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [name, setName] = useState("");
+  const [cur, setCur] = useState("");
+  const [newPw, setNewPw] = useState("");
+  const [msg, setMsg] = useState("");
+
+  useEffect(() => {
+    const token = localStorage.getItem("access_token") || "";
+    fetchWithAuth<Me>("/users/me", token)
+      .then((m) => {
+        setMe(m);
+        setName(m.full_name || "");
+      })
+      .catch(() => setMe(null));
+    fetchWithAuth<Session[]>("/users/sessions", token).then(setSessions).catch(() => setSessions([]));
+  }, []);
+
+  const saveProfile = async () => {
+    const token = localStorage.getItem("access_token") || "";
+    await patchWithAuth("/users/me", { full_name: name }, token).catch(() => {});
+    setMsg("Profile saved");
+  };
+
+  const changePw = async () => {
+    const token = localStorage.getItem("access_token") || "";
+    try {
+      await postWithAuth("/users/change-password", { current_password: cur, new_password: newPw }, token);
+      setMsg("Password updated");
+      setCur("");
+      setNewPw("");
+    } catch (e) {
+      setMsg((e as Error).message);
+    }
+  };
+
+  const toggle2fa = async () => {
+    const token = localStorage.getItem("access_token") || "";
+    const res = await postWithAuth<{ two_factor_enabled: boolean }>("/users/toggle-2fa", {}, token);
+    setMe((m) => (m ? { ...m, two_factor_enabled: res.two_factor_enabled } : m));
+    setMsg("2FA toggled (demo)");
+  };
+
+  return (
+    <AppShell title="Profile & security" subtitle="Account hardening">
+      <div className="grid gap-4 lg:grid-cols-2">
+        <div className="glass-card space-y-3 p-4">
+          <h3 className="flex items-center gap-2 text-sm font-semibold">
+            <ShieldCheck className="h-4 w-4" />
+            Identity
+          </h3>
+          {me ? (
+            <p className="text-soft text-xs">
+              {me.email} · {me.role} · email verified: {me.email_verified ? "yes" : "no"}
+            </p>
+          ) : null}
+          <label className="text-soft text-xs">Display name</label>
+          <input
+            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+          <button
+            type="button"
+            onClick={() => void saveProfile()}
+            className="rounded-lg bg-slate-900 px-4 py-2 text-sm text-white dark:bg-white dark:text-slate-900"
+          >
+            Save profile
+          </button>
+        </div>
+
+        <div className="glass-card space-y-3 p-4">
+          <h3 className="flex items-center gap-2 text-sm font-semibold">
+            <KeyRound className="h-4 w-4" />
+            Password
+          </h3>
+          <input
+            type="password"
+            placeholder="Current password"
+            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
+            value={cur}
+            onChange={(e) => setCur(e.target.value)}
+          />
+          <input
+            type="password"
+            placeholder="New password (8+ chars)"
+            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
+            value={newPw}
+            onChange={(e) => setNewPw(e.target.value)}
+          />
+          <button
+            type="button"
+            onClick={() => void changePw()}
+            className="rounded-lg border border-slate-200 px-4 py-2 text-sm dark:border-slate-700"
+          >
+            Update password
+          </button>
+          <button type="button" onClick={() => void toggle2fa()} className="ml-2 text-sm text-sky-700 underline dark:text-sky-400">
+            Toggle 2FA (demo)
+          </button>
+        </div>
+
+        <div className="glass-card space-y-3 p-4 lg:col-span-2">
+          <h3 className="flex items-center gap-2 text-sm font-semibold">
+            <Smartphone className="h-4 w-4" />
+            Sessions & devices
+          </h3>
+          <div className="grid gap-2 md:grid-cols-2">
+            {sessions.map((s) => (
+              <div key={s.id} className="rounded-lg border border-slate-200 p-3 text-sm dark:border-slate-800">
+                <p className="font-medium">{s.device_label}</p>
+                <p className="text-soft text-xs">
+                  {s.ip_address} · {new Date(s.last_seen).toLocaleString()}
+                </p>
+                {s.is_current ? <span className="mt-1 inline-block text-xs text-emerald-600">Current session</span> : null}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+      {msg ? <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">{msg}</p> : null}
+    </AppShell>
+  );
+}

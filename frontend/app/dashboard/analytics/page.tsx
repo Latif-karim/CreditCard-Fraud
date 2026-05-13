@@ -5,6 +5,7 @@ import { BarChart3, MapPinned } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
 import { RiskDoughnutChart } from "@/components/charts/risk-doughnut-chart";
+import { ScrollReveal } from "@/components/scroll-reveal";
 import { fetchWithAuth } from "@/lib/api";
 import type { LabelValueResponse, LocationStat } from "@/lib/types";
 
@@ -42,10 +43,12 @@ export default function AnalyticsPage() {
           <TinyInfo icon={BarChart3} label="Detection Precision" value="96.2%" />
           <TinyInfo icon={MapPinned} label="Top Risk Corridor" value="London -> Lagos" />
         </div>
-        <RiskDoughnutChart
-          labels={riskDistribution?.labels ?? []}
-          values={riskDistribution?.values ?? []}
-        />
+        <ScrollReveal placeholderClassName="min-h-[280px]">
+          <RiskDoughnutChart
+            labels={riskDistribution?.labels ?? []}
+            values={riskDistribution?.values ?? []}
+          />
+        </ScrollReveal>
         <div className="glass-card p-4">
           <h3 className="mb-3 text-base font-semibold">Top Transaction Locations</h3>
           <div className="w-full overflow-x-auto">

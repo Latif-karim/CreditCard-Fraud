@@ -5,16 +5,36 @@
 @layer base {
   html,
   body {
-    @apply bg-slate-950 text-slate-100 antialiased overflow-x-hidden;
+    @apply overflow-x-hidden antialiased;
+  }
+
+  .dark body {
+    @apply bg-slate-950 text-slate-100;
     background-image:
-      radial-gradient(circle at 1px 1px, rgba(148, 163, 184, 0.1) 1px, transparent 0),
-      linear-gradient(to bottom, rgba(2, 6, 23, 0.72), rgba(2, 6, 23, 0.96));
-    background-size: 24px 24px, 100% 100%;
+      radial-gradient(ellipse 120% 80% at 50% -20%, rgba(56, 189, 248, 0.06), transparent 55%),
+      radial-gradient(circle at 1px 1px, rgba(148, 163, 184, 0.045) 1px, transparent 0),
+      linear-gradient(to bottom, rgba(2, 6, 23, 0.88), rgba(2, 6, 23, 0.97));
+    background-size: 100% 100%, 40px 40px, 100% 100%;
+    background-attachment: fixed;
+  }
+
+  .light body {
+    @apply bg-slate-50 text-slate-900;
+    background-image:
+      radial-gradient(ellipse 120% 80% at 50% -25%, rgba(14, 165, 233, 0.05), transparent 50%),
+      radial-gradient(circle at 1px 1px, rgba(100, 116, 139, 0.055) 1px, transparent 0),
+      linear-gradient(to bottom, rgba(248, 250, 252, 0.97), rgba(241, 245, 249, 0.995));
+    background-size: 100% 100%, 40px 40px, 100% 100%;
+    background-attachment: fixed;
   }
 
   * {
     scrollbar-width: thin;
-    scrollbar-color: #334155 #0b1220;
+    scrollbar-color: #64748b #0f172a;
+  }
+
+  .light * {
+    scrollbar-color: #94a3b8 #e2e8f0;
   }
 
   *::-webkit-scrollbar {
@@ -23,22 +43,24 @@
   }
 
   *::-webkit-scrollbar-track {
-    background: #0b1220;
+    @apply bg-slate-200 dark:bg-[#0b1220];
   }
 
   *::-webkit-scrollbar-thumb {
-    background: #334155;
-    border-radius: 9999px;
-    border: 2px solid #0b1220;
+    @apply rounded-full border-2 border-transparent bg-slate-400 dark:border-[#0b1220] dark:bg-slate-600;
   }
 
   *::-webkit-scrollbar-thumb:hover {
-    background: #475569;
+    @apply bg-slate-500 dark:bg-slate-500;
   }
 }
 
 @layer components {
   .glass-card {
-    @apply rounded-2xl border border-slate-800 bg-slate-900/80 shadow-lg shadow-black/20;
+    @apply rounded-2xl border border-slate-200/90 bg-white/[0.88] shadow-md shadow-slate-200/40 backdrop-blur-[2px] transition-shadow duration-500 dark:border-slate-800/90 dark:bg-slate-900/75 dark:shadow-black/25;
+  }
+
+  .text-soft {
+    @apply text-slate-500 dark:text-slate-400;
   }
 }

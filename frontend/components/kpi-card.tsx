@@ -8,14 +8,14 @@ type KpiCardProps = {
 export function KpiCard({ title, value, subtitle, tone = "default" }: KpiCardProps) {
   const toneClass =
     tone === "danger"
-      ? "border-danger/40"
+      ? "border-red-300 dark:border-danger/40"
       : tone === "success"
-        ? "border-success/40"
-        : "border-slate-700";
+        ? "border-emerald-300 dark:border-success/40"
+        : "border-slate-200 dark:border-slate-700";
   return (
-    <div className={`rounded-2xl border bg-slate-900 ${toneClass} p-4`}>
+    <div className={`rounded-2xl border bg-white p-4 dark:bg-slate-900 ${toneClass}`}>
       <p className="text-soft text-xs">{title}</p>
-      <h3 className="my-2 text-3xl font-semibold">{value}</h3>
+      <h3 className="my-2 text-3xl font-semibold text-slate-900 dark:text-white">{value}</h3>
       {subtitle ? <p className="text-soft text-sm">{subtitle}</p> : null}
     </div>
   );

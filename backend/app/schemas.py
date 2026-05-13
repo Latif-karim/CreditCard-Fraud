@@ -1,10 +1,11 @@
-from marshmallow import Schema, fields
+from marshmallow import Schema, fields, validate
 
 
 class RegisterSchema(Schema):
     email = fields.Email(required=True)
-    password = fields.String(required=True)
-    role = fields.String(load_default="user")
+    password = fields.String(required=True, validate=validate.Length(min=8))
+    role = fields.String(load_default="user", validate=validate.OneOf(["user", "analyst"]))
+    full_name = fields.String(load_default="")
 
 
 class LoginSchema(Schema):
@@ -18,6 +19,11 @@ class TransactionIngestSchema(Schema):
     location = fields.String(required=True)
     merchant = fields.String(load_default="")
     card_last4 = fields.String(load_default="")
+    country = fields.String(load_default="")
+    card_type = fields.String(load_default="")
+    merchant_category = fields.String(load_default="")
+    ip_address = fields.String(load_default="")
+    device_id = fields.String(load_default="")
 
 
 class DecisionSchema(Schema):

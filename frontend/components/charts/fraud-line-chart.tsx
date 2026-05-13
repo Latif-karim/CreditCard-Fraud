@@ -42,7 +42,18 @@ export function FraudLineChart({ labels, fraudSeries, legitSeries }: FraudLineCh
   return (
     <div className="glass-card p-5">
       <h3 className="mb-3 mt-0 text-base font-semibold">Fraud vs Legit Trend</h3>
-      <Line data={data} />
+      <Line
+        data={data}
+        options={{
+          responsive: true,
+          animation: { duration: 820, easing: "easeOutQuart" as const },
+          plugins: { legend: { position: "bottom" as const } },
+          scales: {
+            x: { ticks: { color: "#94a3b8" }, grid: { color: "rgba(148,163,184,0.1)" } },
+            y: { ticks: { color: "#94a3b8" }, grid: { color: "rgba(148,163,184,0.1)" } },
+          },
+        }}
+      />
     </div>
   );
 }

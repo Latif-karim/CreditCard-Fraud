@@ -1,17 +1,21 @@
 import "./globals.css";
 import type { Metadata } from "next";
 
+import { Providers } from "@/components/providers";
+
 export const metadata: Metadata = {
-  title: "Fraud Detection Platform",
-  description: "Credit card fraud detection monitoring dashboard.",
+  title: "FraudShield | Fraud Detection Platform",
+  description: "Enterprise credit card fraud detection, ML scoring, and operations console.",
 };
 
 export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en">
-      <body>{children}</body>
+    <html lang="en" suppressHydrationWarning>
+      <body className="min-h-screen bg-slate-50 text-slate-900 transition-colors duration-200 dark:bg-slate-950 dark:text-slate-100">
+        <Providers>{children}</Providers>
+      </body>
     </html>
   );
 }

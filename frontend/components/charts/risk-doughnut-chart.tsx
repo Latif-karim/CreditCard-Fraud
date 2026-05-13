@@ -25,6 +25,11 @@ export function RiskDoughnutChart({ labels, values }: RiskDoughnutChartProps) {
             },
           ],
         }}
+        options={{
+          responsive: true,
+          animation: { duration: 900, easing: "easeOutQuart" as const, animateRotate: true, animateScale: true },
+          plugins: { legend: { position: "bottom" as const } },
+        }}
       />
     </div>
   );

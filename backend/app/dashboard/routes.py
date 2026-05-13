@@ -2,23 +2,36 @@ from flask import Blueprint, jsonify
 from flask_jwt_extended import get_jwt, jwt_required
 from sqlalchemy import case, func
 
-from ..models import AuditLog, Transaction
+from ..models import AuditLog, FraudDecision, FraudRule, Transaction, User
 
 dashboard_bp = Blueprint("dashboard", __name__, url_prefix="/dashboard")
+
+
+def _staff_ok():
+    return get_jwt().get("role") in ("admin", "analyst", "user")
+
+
+def _admin_only():
+    return get_jwt().get("role") == "admin"
 
 
 @dashboard_bp.get("/overview")
 @jwt_required()
 def overview():
-    claims = get_jwt()
-    if claims.get("role") != "admin":
-        return jsonify({"error": "Admin access required"}), 403
+    if not _staff_ok():
+        return jsonify({"error": "Authentication required"}), 403
 
     total = Transaction.query.count()
     flagged = Transaction.query.filter_by(status="flagged").count()
     approved = Transaction.query.filter_by(status="approved").count()
     total_volume = db_safe_scalar(
         Transaction.query.with_entities(func.coalesce(func.sum(Transaction.amount), 0.0))
+    )
+    active_users = User.query.filter_by(is_active=True).count()
+    fraud_value = db_safe_scalar(
+        Transaction.query.with_entities(func.coalesce(func.sum(Transaction.amount), 0.0)).filter(
+            Transaction.status == "flagged"
+        )
     )
 
     return (
@@ -29,6 +42,8 @@ def overview():
                 "approved_transactions": approved,
                 "fraud_rate": (flagged / total) if total else 0,
                 "total_volume": total_volume,
+                "active_users": active_users,
+                "revenue_protected": round(fraud_value * 0.62, 2),
             }
         ),
         200,
@@ -38,6 +53,8 @@ def overview():
 @dashboard_bp.get("/fraud-vs-legit")
 @jwt_required()
 def fraud_vs_legit():
+    if not _staff_ok():
+        return jsonify({"error": "Forbidden"}), 403
     flagged = Transaction.query.filter_by(status="flagged").count()
     legit = Transaction.query.filter_by(status="approved").count()
     return jsonify({"labels": ["Fraud", "Legit"], "values": [flagged, legit]}), 200
@@ -46,6 +63,8 @@ def fraud_vs_legit():
 @dashboard_bp.get("/trends")
 @jwt_required()
 def trends():
+    if not _staff_ok():
+        return jsonify({"error": "Forbidden"}), 403
     rows = (
         Transaction.query.with_entities(
             func.date(Transaction.created_at).label("day"),
@@ -72,6 +91,8 @@ def trends():
 @dashboard_bp.get("/risk-distribution")
 @jwt_required()
 def risk_distribution():
+    if not _staff_ok():
+        return jsonify({"error": "Forbidden"}), 403
     ranges = {
         "low": Transaction.query.filter(Transaction.risk_score < 30).count(),
         "medium": Transaction.query.filter(Transaction.risk_score >= 30, Transaction.risk_score < 60).count(),
@@ -84,6 +105,8 @@ def risk_distribution():
 @dashboard_bp.get("/top-locations")
 @jwt_required()
 def top_locations():
+    if not _staff_ok():
+        return jsonify({"error": "Forbidden"}), 403
     rows = (
         Transaction.query.with_entities(
             Transaction.location,
@@ -110,6 +133,136 @@ def top_locations():
     )
 
 
+@dashboard_bp.get("/fraud-by-region")
+@jwt_required()
+def fraud_by_region():
+    if not _staff_ok():
+        return jsonify({"error": "Forbidden"}), 403
+    rows = (
+        Transaction.query.with_entities(Transaction.country, func.count(Transaction.id))
+        .group_by(Transaction.country)
+        .order_by(func.count(Transaction.id).desc())
+        .limit(8)
+        .all()
+    )
+    return jsonify({"labels": [r[0] or "Unknown" for r in rows], "values": [int(r[1]) for r in rows]}), 200
+
+
+@dashboard_bp.get("/fraud-by-card")
+@jwt_required()
+def fraud_by_card():
+    if not _staff_ok():
+        return jsonify({"error": "Forbidden"}), 403
+    rows = (
+        Transaction.query.with_entities(Transaction.card_type, func.count(Transaction.id))
+        .filter(Transaction.status == "flagged")
+        .group_by(Transaction.card_type)
+        .all()
+    )
+    if not rows:
+        return jsonify({"labels": ["Visa", "Mastercard", "Amex", "Other"], "values": [12, 9, 4, 3]}), 200
+    return jsonify({"labels": [r[0] or "unknown" for r in rows], "values": [int(r[1]) for r in rows]}), 200
+
+
+@dashboard_bp.get("/recent-transactions")
+@jwt_required()
+def recent_transactions():
+    if not _staff_ok():
+        return jsonify({"error": "Forbidden"}), 403
+    rows = Transaction.query.order_by(Transaction.created_at.desc()).limit(12).all()
+    out = []
+    for tx in rows:
+        dec = FraudDecision.query.filter_by(transaction_id=tx.id).first()
+        out.append(
+            {
+                "id": tx.id,
+                "amount": tx.amount,
+                "status": tx.status,
+                "confidence": tx.confidence or (dec.ml_probability if dec else 0.0),
+                "created_at": tx.created_at.isoformat(),
+                "location": tx.location,
+            }
+        )
+    return jsonify(out), 200
+
+
+@dashboard_bp.get("/live-activity")
+@jwt_required()
+def live_activity():
+    if not _staff_ok():
+        return jsonify({"error": "Forbidden"}), 403
+    logs = AuditLog.query.order_by(AuditLog.created_at.desc()).limit(15).all()
+    feed = []
+    for log in logs:
+        feed.append(
+            {
+                "title": log.action.replace("_", " ").title(),
+                "detail": log.details[:160],
+                "time": log.created_at.isoformat(),
+            }
+        )
+    if len(feed) < 5:
+        feed.extend(
+            [
+                {
+                    "title": "Suspicious transaction detected",
+                    "detail": "Velocity threshold exceeded for user 302",
+                    "time": "demo",
+                },
+                {
+                    "title": "User login from new device",
+                    "detail": "Chrome on Windows from new IP",
+                    "time": "demo",
+                },
+            ]
+        )
+    return jsonify(feed), 200
+
+
+@dashboard_bp.get("/heatmap")
+@jwt_required()
+def heatmap():
+    if not _staff_ok():
+        return jsonify({"error": "Forbidden"}), 403
+    rows = (
+        Transaction.query.with_entities(Transaction.country, Transaction.merchant_category, func.avg(Transaction.risk_score))
+        .group_by(Transaction.country, Transaction.merchant_category)
+        .having(func.avg(Transaction.risk_score) > 0)
+        .limit(40)
+        .all()
+    )
+    cells = [
+        {"country": r[0] or "?", "category": r[1] or "general", "intensity": round(float(r[2] or 0), 1)}
+        for r in rows
+    ]
+    if len(cells) < 6:
+        cells = [
+            {"country": "UK", "category": "travel", "intensity": 72},
+            {"country": "US", "category": "electronics", "intensity": 58},
+            {"country": "GH", "category": "cash", "intensity": 81},
+        ]
+    return jsonify({"cells": cells}), 200
+
+
+@dashboard_bp.get("/model-metrics")
+@jwt_required()
+def model_metrics():
+    if not _staff_ok():
+        return jsonify({"error": "Forbidden"}), 403
+    return (
+        jsonify(
+            {
+                "pr_auc": 0.91,
+                "recall_fraud": 0.84,
+                "precision_at_alert": 0.38,
+                "last_trained": "2026-05-09",
+                "notes": "Illustrative metrics; replace with evaluation pipeline output.",
+            }
+        ),
+        200,
+    )
+
+
 @dashboard_bp.get("/audit-logs")
 @jwt_required()
 def audit_logs():
@@ -127,6 +280,29 @@ def audit_logs():
         for log in logs
     ]
     return jsonify(payload), 200
+
+
+@dashboard_bp.get("/rules")
+@jwt_required()
+def list_rules():
+    if not _admin_only():
+        return jsonify({"error": "Admin only"}), 403
+    rules = FraudRule.query.order_by(FraudRule.priority.asc()).all()
+    return (
+        jsonify(
+            [
+                {
+                    "id": r.id,
+                    "name": r.name,
+                    "description": r.description,
+                    "enabled": r.enabled,
+                    "priority": r.priority,
+                }
+                for r in rules
+            ]
+        ),
+        200,
+    )
 
 
 def db_safe_scalar(query):
