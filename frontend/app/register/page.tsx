@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { getApiBase } from "@/lib/api";
-import { setClientSession } from "@/lib/auth-session";
+import { mirrorSessionCookieFromStorage, setClientSession } from "@/lib/auth-session";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -16,9 +16,11 @@ export default function RegisterPage() {
   const [msg, setMsg] = useState("");
 
   useEffect(() => {
-    if (typeof window !== "undefined" && localStorage.getItem("access_token")) {
-      router.replace("/dashboard");
-    }
+    if (typeof window === "undefined") return;
+    const token = localStorage.getItem("access_token");
+    if (!token) return;
+    mirrorSessionCookieFromStorage();
+    router.replace("/dashboard");
   }, [router]);
 
   const onSubmit = async (e: FormEvent) => {

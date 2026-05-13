@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { getApiBase } from "@/lib/api";
-import { setClientSession } from "@/lib/auth-session";
+import { mirrorSessionCookieFromStorage, setClientSession } from "@/lib/auth-session";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -14,9 +14,14 @@ export default function LoginPage() {
   const [result, setResult] = useState("");
 
   useEffect(() => {
-    if (typeof window !== "undefined" && localStorage.getItem("access_token")) {
-      router.replace("/dashboard");
-    }
+    if (typeof window === "undefined") return;
+    const token = localStorage.getItem("access_token");
+    if (!token) return;
+    mirrorSessionCookieFromStorage();
+    const qs = new URLSearchParams(window.location.search);
+    const next = qs.get("next");
+    const dest = next && next.startsWith("/dashboard") ? next : "/dashboard";
+    router.replace(dest);
   }, [router]);
 
   const onSubmit = async (event: FormEvent) => {
@@ -35,7 +40,10 @@ export default function LoginPage() {
       }
       setClientSession(data.access_token, data.role);
       setResult("");
-      router.push("/dashboard");
+      const qs = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+      const next = qs?.get("next");
+      const dest = next && next.startsWith("/dashboard") ? next : "/dashboard";
+      router.push(dest);
     } catch (error) {
       setResult(`Error: ${(error as Error).message}`);
     }
