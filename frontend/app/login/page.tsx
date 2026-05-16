@@ -4,8 +4,8 @@ import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
-import { getApiBase } from "@/lib/api";
-import { mirrorSessionCookieFromStorage, setClientSession } from "@/lib/auth-session";
+import { AuthError, fetchWithAuth, getApiBase, getStoredToken } from "@/lib/api";
+import { clearClientSession, setClientSession } from "@/lib/auth-session";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -15,13 +15,27 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const token = localStorage.getItem("access_token");
-    if (!token) return;
-    mirrorSessionCookieFromStorage();
     const qs = new URLSearchParams(window.location.search);
-    const next = qs.get("next");
-    const dest = next && next.startsWith("/dashboard") ? next : "/dashboard";
-    router.replace(dest);
+    if (qs.get("reason") === "session_expired") {
+      clearClientSession();
+      setResult("Your session expired. Please sign in again.");
+      return;
+    }
+    const token = getStoredToken();
+    if (!token) return;
+
+    void (async () => {
+      try {
+        await fetchWithAuth("/auth/me", token);
+        const next = qs.get("next");
+        const dest = next && next.startsWith("/dashboard") ? next : "/dashboard";
+        router.replace(dest);
+      } catch (err) {
+        if (!(err instanceof AuthError)) {
+          clearClientSession();
+        }
+      }
+    })();
   }, [router]);
 
   const onSubmit = async (event: FormEvent) => {
@@ -35,10 +49,13 @@ export default function LoginPage() {
       });
       const data = await response.json();
       if (!response.ok) {
-        setResult(data.error || "Login failed");
+        const detail =
+          data.details?.email?.[0] ||
+          (data.details ? JSON.stringify(data.details) : null);
+        setResult(detail || data.error || "Login failed");
         return;
       }
-      setClientSession(data.access_token, data.role);
+      setClientSession(data.access_token, data.role, data.user_id);
       setResult("");
       const qs = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
       const next = qs?.get("next");

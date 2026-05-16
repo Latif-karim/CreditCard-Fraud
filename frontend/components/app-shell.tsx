@@ -5,6 +5,7 @@ import { useState } from "react";
 
 import { Sidebar } from "@/components/sidebar";
 
+import { NotificationSoundToggle } from "@/components/transaction-notification-provider";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 type AppShellProps = {
@@ -27,12 +28,13 @@ export function AppShell({ title, subtitle, children }: AppShellProps) {
       ) : null}
 
       <main className="h-screen min-w-0 overflow-y-auto overflow-x-hidden p-4 md:p-6">
-        <header className="glass-card mb-5 flex items-center justify-between gap-3 p-4 md:p-5">
+        <header className="fintech-panel mb-5 flex items-center justify-between gap-3 p-4 md:p-5">
           <div className="min-w-0">
             <p className="text-soft text-xs uppercase tracking-[0.2em]">{subtitle}</p>
             <h1 className="mt-1 truncate text-xl font-semibold md:text-2xl">{title}</h1>
           </div>
           <div className="flex shrink-0 items-center gap-2">
+            <NotificationSoundToggle />
             <ThemeToggle variant="ghost" />
             <button
               type="button"

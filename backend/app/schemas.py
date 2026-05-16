@@ -1,20 +1,40 @@
-from marshmallow import Schema, fields, validate
+import re
+
+from marshmallow import Schema, ValidationError, fields, validate
+
+# Accept demo TLDs (e.g. user@fraudshield.demo) that strict Email() rejects.
+_EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
+
+
+class LenientEmail(fields.String):
+    """Email field that allows non-IANA TLDs used in demo accounts."""
+
+    default_error_messages = {"invalid": "Not a valid email address."}
+
+    def _deserialize(self, value, attr, data, **kwargs):
+        value = super()._deserialize(value, attr, data, **kwargs)
+        if value is None:
+            return value
+        value = str(value).strip().lower()
+        if not _EMAIL_RE.match(value):
+            raise ValidationError(self.error_messages["invalid"])
+        return value
 
 
 class RegisterSchema(Schema):
-    email = fields.Email(required=True)
+    email = LenientEmail(required=True)
     password = fields.String(required=True, validate=validate.Length(min=8))
     role = fields.String(load_default="user", validate=validate.OneOf(["user", "analyst"]))
     full_name = fields.String(load_default="")
 
 
 class LoginSchema(Schema):
-    email = fields.Email(required=True)
+    email = LenientEmail(required=True)
     password = fields.String(required=True)
 
 
 class TransactionIngestSchema(Schema):
-    user_id = fields.Integer(required=True)
+    user_id = fields.Integer(required=False, allow_none=True)
     amount = fields.Float(required=True)
     location = fields.String(required=True)
     merchant = fields.String(load_default="")

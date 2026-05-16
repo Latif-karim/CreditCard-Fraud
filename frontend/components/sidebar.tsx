@@ -9,6 +9,7 @@ import {
   Brain,
   CreditCard,
   FileText,
+  PlusCircle,
   LayoutDashboard,
   LineChart,
   LogIn,
@@ -24,6 +25,7 @@ import { useClientSession } from "@/lib/use-client-session";
 const navMain = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
   { href: "/dashboard/monitoring", label: "Monitoring", icon: Activity },
+  { href: "/dashboard/capture", label: "Capture", icon: PlusCircle },
   { href: "/dashboard/transactions", label: "Flagged queue", icon: CreditCard },
   { href: "/dashboard/fraud", label: "Fraud lab", icon: Brain },
   { href: "/dashboard/explain", label: "Explainability", icon: LineChart },
@@ -98,7 +100,7 @@ function AccountNav() {
 export function Sidebar({ className = "" }: { className?: string }) {
   return (
     <aside
-      className={`flex flex-col border-r border-slate-200 bg-white/90 dark:border-slate-800 dark:bg-slate-950/90 ${className}`}
+      className={`flex flex-col border-r border-slate-200/80 bg-white/80 backdrop-blur-xl dark:border-slate-800/80 dark:bg-slate-950/85 ${className}`}
     >
       <div className="px-4 py-6">
         <div className="flex items-center gap-2">

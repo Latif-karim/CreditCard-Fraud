@@ -12,3 +12,4 @@ joblib
 numpy
 PyJWT
 flask-cors
+fpdf2

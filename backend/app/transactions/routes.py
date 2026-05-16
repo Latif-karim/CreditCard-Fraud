@@ -1,17 +1,17 @@
 from datetime import datetime, timedelta
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, current_app, jsonify, request
 from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
+from marshmallow import ValidationError
 from sqlalchemy import or_
 
 from ..extensions import db
-from ..fraud.behavior import update_user_profile
-from ..fraud.engine import evaluate_transaction
-from ..fraud.model import predict_fraud_probability
 from ..models import FraudDecision, FraudNotification, Transaction, User
 from ..schemas import TransactionIngestSchema
-from ..services.alerts import send_email_alert
 from ..services.audit import log_action
+from ..services.seed_data import seed_all, seed_transactions_if_needed
+from ..services.simulator import simulator_status, start_simulator, stop_simulator, tick_once
+from ..services.transaction_ingest import ingest_transaction_data
 
 transactions_bp = Blueprint("transactions", __name__, url_prefix="/transactions")
 
@@ -24,107 +24,124 @@ def _role():
 @jwt_required()
 def ingest_transaction():
     actor_user_id = get_jwt_identity()
-    data = TransactionIngestSchema().load(request.get_json() or {})
-    result = evaluate_transaction(
-        user_id=data["user_id"], amount=data["amount"], location=data["location"]
-    )
+    try:
+        data = TransactionIngestSchema().load(request.get_json() or {})
+    except ValidationError as err:
+        return jsonify({"error": "Validation failed", "details": err.messages}), 400
 
-    ten_minutes_ago = datetime.utcnow() - timedelta(minutes=10)
-    tx_frequency_10m = (
-        Transaction.query.filter(
-            Transaction.user_id == data["user_id"], Transaction.created_at >= ten_minutes_ago
-        ).count()
-    )
-    last_tx = (
-        Transaction.query.filter_by(user_id=data["user_id"])
-        .order_by(Transaction.created_at.desc())
-        .first()
-    )
-    minutes_since_last = 9999.0
-    if last_tx:
-        delta = datetime.utcnow() - last_tx.created_at
-        minutes_since_last = delta.total_seconds() / 60
-    ml = predict_fraud_probability(data["amount"], tx_frequency_10m, minutes_since_last)
+    role = _role()
+    uid = int(actor_user_id) if actor_user_id else None
+    if role == "user":
+        if not uid:
+            return jsonify({"error": "Invalid session"}), 401
+        data["user_id"] = uid
+    elif not data.get("user_id"):
+        return jsonify({"error": "user_id is required"}), 400
 
-    tx = Transaction(
-        user_id=data["user_id"],
-        amount=data["amount"],
-        location=data["location"],
-        country=data.get("country") or data.get("location"),
-        merchant=data.get("merchant"),
-        merchant_category=data.get("merchant_category"),
-        card_last4=data.get("card_last4"),
-        card_type=data.get("card_type") or "unknown",
-        ip_address=data.get("ip_address"),
-        device_id=data.get("device_id"),
-        risk_score=result.final_score,
-        confidence=ml.probability,
-        status="flagged" if result.final_score >= 60 else "approved",
-    )
+    target = User.query.get(int(data["user_id"]))
+    if not target:
+        return jsonify({"error": f"User id {data['user_id']} does not exist"}), 400
+    if not target.is_active:
+        return jsonify({"error": "User account is suspended"}), 403
 
-    db.session.add(tx)
-    db.session.flush()
+    try:
+        result = ingest_transaction_data(data, actor_user_id=uid)
+    except Exception as exc:
+        db.session.rollback()
+        return jsonify({"error": str(exc)}), 500
+    return jsonify(result), 201
 
-    decision = FraudDecision(
-        transaction_id=tx.id,
-        rule_score=result.rule_score,
-        behavior_score=result.behavior_score,
-        ml_score=result.ml_score,
-        ml_probability=ml.probability,
-        reasons="; ".join(result.reasons) if result.reasons else "No fraud indicators",
-        final_label=result.label,
-    )
-    db.session.add(decision)
-    update_user_profile(data["user_id"], data["amount"], data["location"])
 
-    log_action(
-        actor_user_id=int(actor_user_id) if actor_user_id else None,
-        action="transaction_ingested",
-        entity="transaction",
-        entity_id=str(tx.id),
-        details={
-            "risk_score": result.final_score,
-            "label": result.label,
-            "reasons": result.reasons,
-        },
-    )
+@transactions_bp.post("/seed")
+@jwt_required()
+def seed_endpoint():
+    if _role() not in ("admin", "analyst"):
+        return jsonify({"error": "Forbidden"}), 403
+    payload = seed_all(min_transactions=int(request.args.get("min", 80)))
+    return jsonify(payload), 200
 
-    if result.final_score >= 60:
-        send_email_alert(
-            transaction_id=tx.id,
-            user_id=data["user_id"],
-            message=f"Suspicious transaction detected with score {result.final_score:.2f}.",
-        )
-        db.session.add(
-            FraudNotification(
-                title="Fraud alert: high risk transaction",
-                body=f"Transaction #{tx.id} scored {result.final_score:.1f}. Review required.",
-                severity="critical" if result.final_score >= 80 else "high",
-                category="suspicious_transaction",
-                user_id=data["user_id"],
-                transaction_id=tx.id,
+
+@transactions_bp.get("/simulator/status")
+@jwt_required()
+def get_simulator_status():
+    return jsonify(simulator_status()), 200
+
+
+@transactions_bp.post("/simulator/start")
+@jwt_required()
+def simulator_start():
+    if _role() not in ("admin", "analyst", "user"):
+        return jsonify({"error": "Forbidden"}), 403
+    interval = int((request.get_json() or {}).get("interval_seconds", 30))
+    status = start_simulator(current_app._get_current_object(), interval_seconds=interval)
+    return jsonify(status), 200
+
+
+@transactions_bp.post("/simulator/stop")
+@jwt_required()
+def simulator_stop():
+    return jsonify(stop_simulator()), 200
+
+
+@transactions_bp.post("/simulator/tick")
+@jwt_required()
+def simulator_tick():
+    """Generate one synthetic transaction immediately."""
+    try:
+        tick_once(current_app._get_current_object())
+        # Return last transaction summary for UI feedback
+        tx = Transaction.query.order_by(Transaction.created_at.desc()).first()
+        if tx:
+            dec = FraudDecision.query.filter_by(transaction_id=tx.id).first()
+            return (
+                jsonify(
+                    {
+                        "transaction_id": tx.id,
+                        "amount": tx.amount,
+                        "location": tx.location,
+                        "merchant": tx.merchant,
+                        "risk_score": tx.risk_score,
+                        "label": dec.final_label if dec else "unknown",
+                        "status": tx.status,
+                        "confidence": tx.confidence or 0,
+                        "reasons": (dec.reasons.split("; ") if dec and dec.reasons else []),
+                        "simulator": simulator_status(),
+                    }
+                ),
+                201,
             )
-        )
+        return jsonify({"message": "tick ok", "simulator": simulator_status()}), 201
+    except Exception as exc:
+        return jsonify({"error": str(exc), "simulator": simulator_status()}), 500
 
-    db.session.commit()
+
+@transactions_bp.get("/feed")
+@jwt_required()
+def transaction_feed():
+    """Return transactions with id greater than after_id (for live notifications)."""
+    after_id = int(request.args.get("after_id", 0))
+    txs = (
+        Transaction.query.filter(Transaction.id > after_id)
+        .order_by(Transaction.id.asc())
+        .limit(25)
+        .all()
+    )
+    latest = Transaction.query.order_by(Transaction.created_at.desc()).first()
     return (
         jsonify(
             {
-                "transaction_id": tx.id,
-                "risk_score": result.final_score,
-                "label": result.label,
-                "status": tx.status,
-                "confidence": ml.probability,
-                "reasons": result.reasons,
+                "items": [_tx_dict(tx) for tx in txs],
+                "latest_id": latest.id if latest else after_id,
             }
         ),
-        201,
+        200,
     )
 
 
 @transactions_bp.get("/flagged")
 @jwt_required()
 def flagged_transactions():
+    seed_transactions_if_needed(min_count=20)
     txs = (
         Transaction.query.filter(Transaction.status == "flagged")
         .order_by(Transaction.created_at.desc())

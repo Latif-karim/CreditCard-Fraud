@@ -1,11 +1,19 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
 import { Activity, AlertTriangle, CheckCircle2, ShieldAlert, Users, Wallet } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
-import { SimpleBarChart } from "@/components/charts/bar-chart";
-import { FraudLineChart } from "@/components/charts/fraud-line-chart";
+
+const FraudLineChart = dynamic(
+  () => import("@/components/charts/fraud-line-chart").then((m) => m.FraudLineChart),
+  { ssr: false, loading: () => <ChartSkeleton /> }
+);
+const SimpleBarChart = dynamic(
+  () => import("@/components/charts/bar-chart").then((m) => m.SimpleBarChart),
+  { ssr: false, loading: () => <ChartSkeleton /> }
+);
 import { KpiCard } from "@/components/kpi-card";
 import { RiskHeatmap } from "@/components/risk-heatmap";
 import { ScrollReveal } from "@/components/scroll-reveal";
@@ -364,6 +372,10 @@ function HealthRow({
   );
 }
 
+function ChartSkeleton() {
+  return <div className="glass-card min-h-[220px] animate-pulse bg-slate-100/50 dark:bg-slate-800/30" />;
+}
+
 function MetricPill({
   icon: Icon,
   label,
@@ -374,7 +386,7 @@ function MetricPill({
   value: string;
 }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 dark:border-slate-800 dark:bg-slate-900">
+    <div className="fintech-panel px-4 py-3">
       <div className="flex items-center gap-2">
         <Icon className="h-4 w-4 text-slate-500 dark:text-slate-300" />
         <span className="text-soft text-xs">{label}</span>

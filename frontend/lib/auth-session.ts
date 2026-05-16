@@ -20,15 +20,19 @@ export function emitAuthChanged(): void {
   window.dispatchEvent(new Event(AUTH_CHANGED_EVENT));
 }
 
-/** Sync cookie with localStorage (e.g. legacy tab had token before cookie existed). */
+/** Sync cookie with localStorage; clear cookie when token is missing or too short. */
 export function mirrorSessionCookieFromStorage(): void {
   if (typeof window === "undefined") return;
-  writeSessionPresenceCookie(Boolean(localStorage.getItem("access_token")));
+  const token = localStorage.getItem("access_token") || "";
+  writeSessionPresenceCookie(token.length > 20);
 }
 
-export function setClientSession(accessToken: string, role: string): void {
+export function setClientSession(accessToken: string, role: string, userId?: number): void {
   localStorage.setItem("access_token", accessToken);
   localStorage.setItem("role", role);
+  if (userId != null) {
+    localStorage.setItem("user_id", String(userId));
+  }
   writeSessionPresenceCookie(true);
   emitAuthChanged();
 }
@@ -36,6 +40,15 @@ export function setClientSession(accessToken: string, role: string): void {
 export function clearClientSession(): void {
   localStorage.removeItem("access_token");
   localStorage.removeItem("role");
+  localStorage.removeItem("user_id");
   writeSessionPresenceCookie(false);
   emitAuthChanged();
+}
+
+export function getClientUserId(): number | null {
+  if (typeof window === "undefined") return null;
+  const raw = localStorage.getItem("user_id");
+  if (!raw) return null;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : null;
 }

@@ -1,7 +1,7 @@
 from flask import Flask, jsonify
 from flask_migrate import Migrate
-
 from flask_cors import CORS
+from marshmallow import ValidationError
 
 from .admin.routes import admin_bp
 from .alerts.routes import alerts_bp
@@ -25,6 +25,10 @@ def create_app(config_class=Config):
     Migrate(app, db)
     CORS(app, resources={r"/*": {"origins": "*"}})
 
+    @app.errorhandler(ValidationError)
+    def handle_validation_error(err):
+        return jsonify({"error": "Validation failed", "details": err.messages}), 400
+
     app.register_blueprint(auth_bp)
     app.register_blueprint(transactions_bp)
     app.register_blueprint(dashboard_bp)
@@ -37,5 +41,13 @@ def create_app(config_class=Config):
     @app.get("/health")
     def health():
         return jsonify({"status": "ok"}), 200
+
+    with app.app_context():
+        from .services.seed_data import seed_all
+
+        try:
+            seed_all(min_transactions=80)
+        except Exception:
+            pass
 
     return app

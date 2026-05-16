@@ -44,7 +44,7 @@ export default function RegisterPage() {
     });
     const loginData = await loginRes.json();
     if (loginRes.ok && loginData.access_token) {
-      setClientSession(loginData.access_token, loginData.role);
+      setClientSession(loginData.access_token, loginData.role, loginData.user_id);
       router.push("/dashboard");
       return;
     }
