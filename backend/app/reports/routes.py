@@ -7,7 +7,8 @@ from flask import Blueprint, Response, jsonify
 from flask_jwt_extended import jwt_required
 
 from ..models import AuditLog, Transaction
-from ..services.seed_data import seed_transactions_if_needed
+from ..services.rbac import is_staff, scope_transactions
+from ..services.seed_data import seed_all, seed_transactions_if_needed
 
 reports_bp = Blueprint("reports", __name__, url_prefix="/reports")
 
@@ -21,7 +22,7 @@ def _ensure_report_data() -> int:
 @jwt_required()
 def export_transactions_csv():
     _ensure_report_data()
-    rows = Transaction.query.order_by(Transaction.created_at.desc()).limit(5000).all()
+    rows = scope_transactions(Transaction.query).order_by(Transaction.created_at.desc()).limit(5000).all()
     buf = io.StringIO()
     # UTF-8 BOM helps Excel open the file correctly on Windows
     buf.write("\ufeff")
@@ -188,5 +189,7 @@ def summary_pdf():
 @reports_bp.post("/seed")
 @jwt_required()
 def force_seed():
+    if not is_staff():
+        return jsonify({"error": "Forbidden"}), 403
     payload = seed_all(min_transactions=80)
     return jsonify({"message": "ok", **payload}), 200

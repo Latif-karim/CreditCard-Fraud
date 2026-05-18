@@ -6,13 +6,14 @@ import { useRouter } from "next/navigation";
 
 import { getApiBase } from "@/lib/api";
 import { mirrorSessionCookieFromStorage, setClientSession } from "@/lib/auth-session";
+import { ROLE_DESCRIPTIONS, ROLE_LABELS, type AppRole } from "@/lib/roles";
 
 export default function RegisterPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
-  const [role, setRole] = useState<"user" | "analyst">("user");
+  const [role, setRole] = useState<AppRole>("user");
   const [msg, setMsg] = useState("");
 
   useEffect(() => {
@@ -33,7 +34,8 @@ export default function RegisterPage() {
     });
     const data = await res.json();
     if (!res.ok) {
-      setMsg(data.error || "Registration failed");
+      const detail = data.details?.email?.[0] || data.details?.role?.[0];
+      setMsg(detail || data.error || "Registration failed");
       return;
     }
 
@@ -99,11 +101,18 @@ export default function RegisterPage() {
               <select
                 className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
                 value={role}
-                onChange={(e) => setRole(e.target.value as "user" | "analyst")}
+                onChange={(e) => setRole(e.target.value as AppRole)}
               >
-                <option value="user">Normal user</option>
-                <option value="analyst">Analyst</option>
+                <option value="user">{ROLE_LABELS.user}</option>
+                <option value="analyst">{ROLE_LABELS.analyst}</option>
+                <option value="admin">{ROLE_LABELS.admin}</option>
               </select>
+              <p className="text-soft mt-1.5 text-xs leading-relaxed">{ROLE_DESCRIPTIONS[role]}</p>
+              {role === "admin" ? (
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                  Includes user management, fraud rules, and platform settings.
+                </p>
+              ) : null}
             </div>
             <button
               type="submit"

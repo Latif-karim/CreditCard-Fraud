@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { BarChart3, MapPinned } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
+import { RoleGuard } from "@/components/role-guard";
 import { RiskDoughnutChart } from "@/components/charts/risk-doughnut-chart";
 import { ScrollReveal } from "@/components/scroll-reveal";
 import { fetchWithAuth } from "@/lib/api";
@@ -37,6 +38,7 @@ export default function AnalyticsPage() {
   }, []);
 
   return (
+    <RoleGuard allow={["analyst", "admin"]} title="Analytics">
     <AppShell title="Analytics" subtitle="Risk Intelligence">
       <div className="space-y-5">
         <div className="grid gap-4 md:grid-cols-2">
@@ -75,6 +77,7 @@ export default function AnalyticsPage() {
         </div>
       </div>
     </AppShell>
+    </RoleGuard>
   );
 }
 

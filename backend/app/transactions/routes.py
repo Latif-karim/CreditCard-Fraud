@@ -11,6 +11,7 @@ from ..schemas import TransactionIngestSchema
 from ..services.audit import log_action
 from ..services.seed_data import seed_all, seed_transactions_if_needed
 from ..services.simulator import simulator_status, start_simulator, stop_simulator, tick_once
+from ..services.rbac import can_manage_transaction, is_staff, scope_transactions
 from ..services.transaction_ingest import ingest_transaction_data
 
 transactions_bp = Blueprint("transactions", __name__, url_prefix="/transactions")
@@ -70,8 +71,8 @@ def get_simulator_status():
 @transactions_bp.post("/simulator/start")
 @jwt_required()
 def simulator_start():
-    if _role() not in ("admin", "analyst", "user"):
-        return jsonify({"error": "Forbidden"}), 403
+    if _role() not in ("admin", "analyst"):
+        return jsonify({"error": "Simulator requires analyst or admin role"}), 403
     interval = int((request.get_json() or {}).get("interval_seconds", 30))
     status = start_simulator(current_app._get_current_object(), interval_seconds=interval)
     return jsonify(status), 200
@@ -80,12 +81,16 @@ def simulator_start():
 @transactions_bp.post("/simulator/stop")
 @jwt_required()
 def simulator_stop():
+    if not is_staff():
+        return jsonify({"error": "Forbidden"}), 403
     return jsonify(stop_simulator()), 200
 
 
 @transactions_bp.post("/simulator/tick")
 @jwt_required()
 def simulator_tick():
+    if not is_staff():
+        return jsonify({"error": "Forbidden"}), 403
     """Generate one synthetic transaction immediately."""
     try:
         tick_once(current_app._get_current_object())
@@ -121,12 +126,12 @@ def transaction_feed():
     """Return transactions with id greater than after_id (for live notifications)."""
     after_id = int(request.args.get("after_id", 0))
     txs = (
-        Transaction.query.filter(Transaction.id > after_id)
+        scope_transactions(Transaction.query.filter(Transaction.id > after_id))
         .order_by(Transaction.id.asc())
         .limit(25)
         .all()
     )
-    latest = Transaction.query.order_by(Transaction.created_at.desc()).first()
+    latest = scope_transactions(Transaction.query).order_by(Transaction.created_at.desc()).first()
     return (
         jsonify(
             {
@@ -143,7 +148,7 @@ def transaction_feed():
 def flagged_transactions():
     seed_transactions_if_needed(min_count=20)
     txs = (
-        Transaction.query.filter(Transaction.status == "flagged")
+        scope_transactions(Transaction.query.filter(Transaction.status == "flagged"))
         .order_by(Transaction.created_at.desc())
         .limit(100)
         .all()
@@ -167,7 +172,7 @@ def list_transactions():
     date_to = request.args.get("date_to")
     sort = request.args.get("sort", "created_at_desc")
 
-    query = Transaction.query
+    query = scope_transactions(Transaction.query)
     if q:
         clauses = [
             Transaction.merchant.ilike(f"%{q}%"),
@@ -231,6 +236,8 @@ def transaction_action(transaction_id: int):
     tx = Transaction.query.get(transaction_id)
     if not tx:
         return jsonify({"error": "Not found"}), 404
+    if not can_manage_transaction(tx):
+        return jsonify({"error": "Forbidden"}), 403
 
     actor = get_jwt_identity()
     if action == "flag":

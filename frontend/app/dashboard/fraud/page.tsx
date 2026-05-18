@@ -4,6 +4,7 @@ import { useState } from "react";
 import { FlaskConical } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
+import { RoleGuard } from "@/components/role-guard";
 import { HorizontalFeatureChart } from "@/components/charts/horizontal-feature-chart";
 import { ScrollReveal } from "@/components/scroll-reveal";
 import { postWithAuth } from "@/lib/api";
@@ -37,6 +38,7 @@ export default function FraudLabPage() {
   };
 
   return (
+    <RoleGuard allow={["analyst", "admin"]} title="Fraud lab">
     <AppShell title="Fraud detection lab" subtitle="Manual simulation & scoring">
       <div className="grid gap-4 lg:grid-cols-[320px_1fr]">
         <div className="glass-card space-y-3 p-4">
@@ -114,5 +116,6 @@ export default function FraudLabPage() {
         </div>
       </div>
     </AppShell>
+    </RoleGuard>
   );
 }

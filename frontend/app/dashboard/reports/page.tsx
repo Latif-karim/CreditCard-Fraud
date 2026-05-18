@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Download, FileJson, FileText, RefreshCw } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
+import { RoleGuard } from "@/components/role-guard";
 import { fetchBlobWithAuth, fetchWithAuth, getStoredToken, postWithAuth } from "@/lib/api";
 
 function downloadBlob(blob: Blob, filename: string) {
@@ -126,6 +127,7 @@ export default function ReportsPage() {
   };
 
   return (
+    <RoleGuard allow={["analyst", "admin"]} title="Reports">
     <AppShell title="Reports & exports" subtitle="Compliance-ready outputs">
       <div className="grid gap-4 lg:grid-cols-2">
         <div className="fintech-panel space-y-3 p-5">
@@ -167,6 +169,7 @@ export default function ReportsPage() {
         </div>
       </div>
     </AppShell>
+    </RoleGuard>
   );
 }
 

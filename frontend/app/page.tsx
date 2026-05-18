@@ -14,6 +14,7 @@ import {
 
 import { LandingNav } from "@/components/landing-nav";
 import { LandingTeamCtas } from "@/components/landing-team-ctas";
+import { ProductScreenshot } from "@/components/product-screenshot";
 
 const fade = {
   initial: { opacity: 0, y: 12 },
@@ -135,29 +136,23 @@ export default function LandingPage() {
                   <Shield className="h-4 w-4" /> RBAC for admin, analyst, and cardholder views
                 </li>
                 <li className="flex items-center gap-2">
-                  <Sparkles className="h-4 w-4" /> Exportable reports for regulators & thesis reviewers
+                  <Sparkles className="h-4 w-4" /> Exportable reports for compliance and audit
                 </li>
               </ul>
             </motion.div>
-            <motion.div {...fade} className="relative aspect-video overflow-hidden rounded-2xl border border-white/10 bg-slate-800/80 shadow-2xl">
-              <img
-                src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=1200&q=80"
-                alt="Analytics dashboard preview"
-                className="h-full w-full object-cover opacity-90"
-              />
-              <div className="absolute inset-0 bg-black/35" />
-              <p className="absolute bottom-4 left-4 text-xs text-slate-200">Placeholder hero visual — swap for product screenshots.</p>
+            <motion.div {...fade}>
+              <ProductScreenshot />
             </motion.div>
           </div>
         </section>
 
-        <section id="team" className="mx-auto max-w-6xl px-6 py-16">
+        <section id="get-started" className="mx-auto max-w-6xl px-6 py-16">
           <motion.div {...fade} className="glass-card flex flex-col gap-4 p-8 md:flex-row md:items-center md:justify-between">
             <div>
-              <h2 className="text-2xl font-semibold text-slate-900 dark:text-white">Built for academic & production rigor</h2>
+              <h2 className="text-2xl font-semibold text-slate-900 dark:text-white">Ready to protect your payments?</h2>
               <p className="text-soft mt-2 max-w-xl text-sm">
-                FraudShield demonstrates responsible AI: interpretable scores, human-in-the-loop review, and audit-grade
-                logging suitable for capstone defense and investor diligence.
+                Deploy FraudShield to score transactions in real time, investigate alerts with explainable insights,
+                and keep a complete audit trail for your risk team.
               </p>
             </div>
             <LandingTeamCtas />
@@ -166,7 +161,7 @@ export default function LandingPage() {
       </main>
 
       <footer className="border-t border-slate-200 py-10 text-center text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
-        © {new Date().getFullYear()} FraudShield · Risk & compliance demo stack (Next.js + Flask).
+        © {new Date().getFullYear()} FraudShield. All rights reserved.
       </footer>
     </div>
   );

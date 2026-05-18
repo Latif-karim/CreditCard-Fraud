@@ -10,6 +10,7 @@ import {
   Tooltip,
 } from "chart.js";
 import { Bar } from "react-chartjs-2";
+import { BarChart3 } from "lucide-react";
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 
@@ -27,14 +28,24 @@ export function SimpleBarChart({ title, labels, values, horizontal }: SimpleBarC
       {
         label: "Count",
         data: values,
-        backgroundColor: "rgba(59, 130, 246, 0.55)",
-        borderRadius: 6,
+        backgroundColor: horizontal
+          ? values.map((_, i) => `rgba(34, 211, 238, ${0.35 + (i % 3) * 0.15})`)
+          : values.map((_, i) => `rgba(56, 189, 248, ${0.45 + (i % 4) * 0.1})`),
+        borderColor: horizontal ? "rgba(34, 211, 238, 0.7)" : "rgba(56, 189, 248, 0.8)",
+        borderWidth: 1,
+        borderRadius: 8,
+        borderSkipped: false,
       },
     ],
   };
   return (
     <div className="glass-card p-5">
-      <h3 className="mb-3 text-base font-semibold">{title}</h3>
+      <div className="mb-4 flex items-center gap-2.5">
+        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-sky-500/15 to-indigo-500/10 text-sky-700 dark:text-sky-300">
+          <BarChart3 className="h-4 w-4" strokeWidth={2.25} />
+        </div>
+        <h3 className="text-base font-semibold text-slate-900 dark:text-white">{title}</h3>
+      </div>
       <Bar
         data={data}
         options={{

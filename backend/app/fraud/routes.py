@@ -1,9 +1,10 @@
 from datetime import datetime, timedelta
 
 from flask import Blueprint, jsonify, request
-from flask_jwt_extended import jwt_required
+from flask_jwt_extended import get_jwt_identity, jwt_required
 
 from ..fraud.engine import evaluate_transaction
+from ..services.rbac import actor_user_id, can_manage_transaction, is_staff
 from ..fraud.explain import explain_features
 from ..fraud.model import predict_fraud_probability
 from ..models import FraudDecision, Transaction
@@ -16,7 +17,13 @@ fraud_bp = Blueprint("fraud", __name__, url_prefix="/fraud")
 def simulate():
     """Manual transaction simulation for ML showcase (does not persist by default)."""
     data = request.get_json() or {}
-    user_id = int(data.get("user_id", 1))
+    if is_staff():
+        user_id = int(data.get("user_id", 1))
+    else:
+        uid = actor_user_id()
+        if not uid:
+            return jsonify({"error": "Invalid session"}), 401
+        user_id = uid
     amount = float(data.get("amount", 0))
     location = str(data.get("location", "Unknown"))
     persist = bool(data.get("persist", False))
@@ -78,6 +85,8 @@ def explain_transaction(transaction_id: int):
     tx = Transaction.query.get(transaction_id)
     if not tx:
         return jsonify({"error": "Transaction not found"}), 404
+    if not can_manage_transaction(tx):
+        return jsonify({"error": "Forbidden"}), 403
     decision = FraudDecision.query.filter_by(transaction_id=transaction_id).first()
 
     ten_minutes_ago = datetime.utcnow() - timedelta(minutes=10)

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Clock3, Search, ShieldAlert } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
+import { RoleGuard } from "@/components/role-guard";
 import { fetchWithAuth } from "@/lib/api";
 import type { FlaggedTransaction } from "@/lib/types";
 
@@ -30,6 +31,7 @@ export default function TransactionsPage() {
         ];
 
   return (
+    <RoleGuard allow={["analyst", "admin"]} title="Flagged queue">
     <AppShell title="Flagged Transactions" subtitle="Investigation Queue">
       <div className="space-y-5">
         <div className="grid gap-4 md:grid-cols-3">
@@ -74,6 +76,7 @@ export default function TransactionsPage() {
         </div>
       </div>
     </AppShell>
+    </RoleGuard>
   );
 }
 

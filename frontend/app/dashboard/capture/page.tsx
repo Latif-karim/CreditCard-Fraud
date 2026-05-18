@@ -223,6 +223,7 @@ export default function CapturePage() {
           </p>
         </div>
 
+        {canPickUser ? (
         <div className="fintech-panel p-5">
           <SectionTitle icon={Activity} title="Live stream (30s)" />
           <p className="text-soft mt-2 text-xs">
@@ -252,6 +253,15 @@ export default function CapturePage() {
             </button>
           </div>
         </div>
+        ) : (
+          <div className="fintech-panel p-5 text-sm text-slate-600 dark:text-slate-300">
+            <SectionTitle icon={Activity} title="Live stream" />
+            <p className="text-soft mt-2 text-xs leading-relaxed">
+              Auto-generation every 30 seconds is available to analysts and administrators. As a cardholder, use manual
+              entry below to simulate your own payments.
+            </p>
+          </div>
+        )}
 
         <form onSubmit={submitManual} className="fintech-panel col-span-full space-y-4 p-5 lg:col-span-2">
           <SectionTitle icon={Zap} title="Manual transaction" />

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Filter, RefreshCw } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
+import { RoleGuard } from "@/components/role-guard";
 import { fetchWithAuth, patchWithAuth } from "@/lib/api";
 import type { PaginatedTransactions, TransactionRow } from "@/lib/types";
 
@@ -47,6 +48,7 @@ export default function MonitoringPage() {
   const rows: TransactionRow[] = data?.items ?? [];
 
   return (
+    <RoleGuard allow={["analyst", "admin"]} title="Transaction monitoring">
     <AppShell title="Transaction monitoring" subtitle="Real-time stream & controls">
       <div className="space-y-4">
         <div className="glass-card flex flex-wrap items-end gap-3 p-4">
@@ -202,5 +204,6 @@ export default function MonitoringPage() {
         </div>
       </div>
     </AppShell>
+    </RoleGuard>
   );
 }

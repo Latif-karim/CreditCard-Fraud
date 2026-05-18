@@ -3,6 +3,7 @@ from flask_jwt_extended import get_jwt, jwt_required
 from sqlalchemy import case, func
 
 from ..models import AuditLog, FraudDecision, FraudRule, Transaction, User
+from ..services.rbac import is_cardholder, is_staff, scope_transactions
 
 dashboard_bp = Blueprint("dashboard", __name__, url_prefix="/dashboard")
 
@@ -21,33 +22,31 @@ def overview():
     if not _staff_ok():
         return jsonify({"error": "Authentication required"}), 403
 
-    total = Transaction.query.count()
-    flagged = Transaction.query.filter_by(status="flagged").count()
-    approved = Transaction.query.filter_by(status="approved").count()
+    base = scope_transactions(Transaction.query)
+    total = base.count()
+    flagged = base.filter(Transaction.status == "flagged").count()
+    approved = base.filter(Transaction.status == "approved").count()
     total_volume = db_safe_scalar(
-        Transaction.query.with_entities(func.coalesce(func.sum(Transaction.amount), 0.0))
+        base.with_entities(func.coalesce(func.sum(Transaction.amount), 0.0))
     )
     active_users = User.query.filter_by(is_active=True).count()
     fraud_value = db_safe_scalar(
-        Transaction.query.with_entities(func.coalesce(func.sum(Transaction.amount), 0.0)).filter(
+        base.with_entities(func.coalesce(func.sum(Transaction.amount), 0.0)).filter(
             Transaction.status == "flagged"
         )
     )
 
-    return (
-        jsonify(
-            {
-                "total_transactions": total,
-                "flagged_transactions": flagged,
-                "approved_transactions": approved,
-                "fraud_rate": (flagged / total) if total else 0,
-                "total_volume": total_volume,
-                "active_users": active_users,
-                "revenue_protected": round(fraud_value * 0.62, 2),
-            }
-        ),
-        200,
-    )
+    payload = {
+        "total_transactions": total,
+        "flagged_transactions": flagged,
+        "approved_transactions": approved,
+        "fraud_rate": (flagged / total) if total else 0,
+        "total_volume": total_volume,
+        "active_users": active_users if is_staff() else 1,
+        "revenue_protected": round(fraud_value * 0.62, 2),
+        "scope": "personal" if is_cardholder() else "global",
+    }
+    return jsonify(payload), 200
 
 
 @dashboard_bp.get("/fraud-vs-legit")
@@ -55,8 +54,9 @@ def overview():
 def fraud_vs_legit():
     if not _staff_ok():
         return jsonify({"error": "Forbidden"}), 403
-    flagged = Transaction.query.filter_by(status="flagged").count()
-    legit = Transaction.query.filter_by(status="approved").count()
+    base = scope_transactions(Transaction.query)
+    flagged = base.filter(Transaction.status == "flagged").count()
+    legit = base.filter(Transaction.status == "approved").count()
     return jsonify({"labels": ["Fraud", "Legit"], "values": [flagged, legit]}), 200
 
 
@@ -66,7 +66,8 @@ def trends():
     if not _staff_ok():
         return jsonify({"error": "Forbidden"}), 403
     rows = (
-        Transaction.query.with_entities(
+        scope_transactions(Transaction.query)
+        .with_entities(
             func.date(Transaction.created_at).label("day"),
             func.sum(case((Transaction.status == "flagged", 1), else_=0)).label("fraud_count"),
             func.sum(case((Transaction.status == "approved", 1), else_=0)).label("legit_count"),
@@ -93,11 +94,12 @@ def trends():
 def risk_distribution():
     if not _staff_ok():
         return jsonify({"error": "Forbidden"}), 403
+    base = scope_transactions(Transaction.query)
     ranges = {
-        "low": Transaction.query.filter(Transaction.risk_score < 30).count(),
-        "medium": Transaction.query.filter(Transaction.risk_score >= 30, Transaction.risk_score < 60).count(),
-        "high": Transaction.query.filter(Transaction.risk_score >= 60, Transaction.risk_score < 80).count(),
-        "critical": Transaction.query.filter(Transaction.risk_score >= 80).count(),
+        "low": base.filter(Transaction.risk_score < 30).count(),
+        "medium": base.filter(Transaction.risk_score >= 30, Transaction.risk_score < 60).count(),
+        "high": base.filter(Transaction.risk_score >= 60, Transaction.risk_score < 80).count(),
+        "critical": base.filter(Transaction.risk_score >= 80).count(),
     }
     return jsonify({"labels": list(ranges.keys()), "values": list(ranges.values())}), 200
 
@@ -108,7 +110,8 @@ def top_locations():
     if not _staff_ok():
         return jsonify({"error": "Forbidden"}), 403
     rows = (
-        Transaction.query.with_entities(
+        scope_transactions(Transaction.query)
+        .with_entities(
             Transaction.location,
             func.count(Transaction.id).label("count"),
             func.avg(Transaction.risk_score).label("avg_risk"),
@@ -154,7 +157,8 @@ def fraud_by_card():
     if not _staff_ok():
         return jsonify({"error": "Forbidden"}), 403
     rows = (
-        Transaction.query.with_entities(Transaction.card_type, func.count(Transaction.id))
+        scope_transactions(Transaction.query)
+        .with_entities(Transaction.card_type, func.count(Transaction.id))
         .filter(Transaction.status == "flagged")
         .group_by(Transaction.card_type)
         .all()
@@ -169,7 +173,7 @@ def fraud_by_card():
 def recent_transactions():
     if not _staff_ok():
         return jsonify({"error": "Forbidden"}), 403
-    rows = Transaction.query.order_by(Transaction.created_at.desc()).limit(12).all()
+    rows = scope_transactions(Transaction.query).order_by(Transaction.created_at.desc()).limit(12).all()
     out = []
     for tx in rows:
         dec = FraudDecision.query.filter_by(transaction_id=tx.id).first()
@@ -191,6 +195,17 @@ def recent_transactions():
 def live_activity():
     if not _staff_ok():
         return jsonify({"error": "Forbidden"}), 403
+    if is_cardholder():
+        rows = scope_transactions(Transaction.query).order_by(Transaction.created_at.desc()).limit(8).all()
+        feed = [
+            {
+                "title": f"Transaction #{tx.id}",
+                "detail": f"${tx.amount:.2f} · {tx.location} · risk {tx.risk_score:.0f}",
+                "time": tx.created_at.isoformat(),
+            }
+            for tx in rows
+        ]
+        return jsonify(feed), 200
     logs = AuditLog.query.order_by(AuditLog.created_at.desc()).limit(15).all()
     feed = []
     for log in logs:
@@ -225,7 +240,8 @@ def heatmap():
     if not _staff_ok():
         return jsonify({"error": "Forbidden"}), 403
     rows = (
-        Transaction.query.with_entities(Transaction.country, Transaction.merchant_category, func.avg(Transaction.risk_score))
+        scope_transactions(Transaction.query)
+        .with_entities(Transaction.country, Transaction.merchant_category, func.avg(Transaction.risk_score))
         .group_by(Transaction.country, Transaction.merchant_category)
         .having(func.avg(Transaction.risk_score) > 0)
         .limit(40)
@@ -266,6 +282,8 @@ def model_metrics():
 @dashboard_bp.get("/audit-logs")
 @jwt_required()
 def audit_logs():
+    if is_cardholder():
+        return jsonify({"error": "Staff role required"}), 403
     logs = AuditLog.query.order_by(AuditLog.created_at.desc()).limit(200).all()
     payload = [
         {

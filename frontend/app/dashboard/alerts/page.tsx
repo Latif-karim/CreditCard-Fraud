@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Mail } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
+import { RoleGuard } from "@/components/role-guard";
 import { fetchWithAuth, patchWithAuth } from "@/lib/api";
 import type { FraudNotification } from "@/lib/types";
 
@@ -34,6 +35,7 @@ export default function AlertsPage() {
   };
 
   return (
+    <RoleGuard allow={["analyst", "admin"]} title="Alerts">
     <AppShell title="Alerts & notifications" subtitle="Fraud operations inbox">
       <div className="grid gap-4 lg:grid-cols-2">
         <div className="glass-card p-4">
@@ -83,5 +85,6 @@ export default function AlertsPage() {
         </div>
       </div>
     </AppShell>
+    </RoleGuard>
   );
 }

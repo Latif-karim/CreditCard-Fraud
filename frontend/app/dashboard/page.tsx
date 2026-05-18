@@ -2,9 +2,26 @@
 
 import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
-import { Activity, AlertTriangle, CheckCircle2, ShieldAlert, Users, Wallet } from "lucide-react";
+import {
+  Activity,
+  AlertTriangle,
+  ArrowLeftRight,
+  Bell,
+  CheckCircle2,
+  Clock,
+  CreditCard,
+  Percent,
+  Radio,
+  ShieldAlert,
+  ShieldCheck,
+  Users,
+  Wallet,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
+import { RoleBanner } from "@/components/role-banner";
+import { useUserRole } from "@/lib/use-user-role";
 
 const FraudLineChart = dynamic(
   () => import("@/components/charts/fraud-line-chart").then((m) => m.FraudLineChart),
@@ -38,6 +55,8 @@ type RecentTx = {
 };
 
 export default function DashboardPage() {
+  const role = useUserRole();
+  const isStaff = role === "analyst" || role === "admin";
   const [overview, setOverview] = useState<DashboardOverview | null>(null);
   const [trends, setTrends] = useState<TrendResponse | null>(null);
   const [flagged, setFlagged] = useState<FlaggedTransaction[]>([]);
@@ -68,11 +87,13 @@ export default function DashboardPage() {
       } catch {
         setFlagged([]);
       }
-      try {
-        const a = await fetchWithAuth<AuditLog[]>("/dashboard/audit-logs", token);
-        setAuditLogs(a.slice(0, 6));
-      } catch {
-        setAuditLogs([]);
+      if (isStaff) {
+        try {
+          const a = await fetchWithAuth<AuditLog[]>("/dashboard/audit-logs", token);
+          setAuditLogs(a.slice(0, 6));
+        } catch {
+          setAuditLogs([]);
+        }
       }
       try {
         setRegion(await fetchWithAuth<LabelValueResponse>("/dashboard/fraud-by-region", token));
@@ -106,7 +127,7 @@ export default function DashboardPage() {
       }
     };
     void load();
-  }, []);
+  }, [isStaff]);
 
   const view = overview ?? {
     total_transactions: 124302,
@@ -191,38 +212,83 @@ export default function DashboardPage() {
           { title: "User login from new device", detail: "New fingerprint + ASN", time: "demo" },
         ];
 
+  const subtitle =
+    role === "user"
+      ? "Your card activity"
+      : role === "analyst"
+        ? "Analyst command center"
+        : "Command center";
+
   return (
-    <AppShell title="Operations dashboard" subtitle="Command center">
+    <AppShell title="Operations dashboard" subtitle={subtitle}>
       <div className="space-y-5">
+        <RoleBanner />
         <div className="flex flex-wrap items-center gap-2">
-          <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
-            Fraud rate {(view.fraud_rate * 100).toFixed(2)}%
+          <span className="inline-flex items-center gap-2 rounded-full border border-emerald-200/80 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-950/40 dark:text-emerald-200">
+            <span className="relative flex h-2 w-2">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+            </span>
+            Live · Fraud rate {(view.fraud_rate * 100).toFixed(2)}%
           </span>
           {modelMetrics ? (
-            <span className="text-soft text-xs">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white/80 px-3 py-1 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-900/80 dark:text-slate-300">
+              <Activity className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
               PR-AUC {String(modelMetrics.pr_auc)} · Recall {String(modelMetrics.recall_fraud)}
             </span>
           ) : null}
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
-          <KpiCard title="Total transactions" value={String(view.total_transactions)} subtitle="Monitored volume" />
-          <KpiCard title="Fraud detected" value={String(view.flagged_transactions)} tone="danger" subtitle="Open investigations" />
-          <KpiCard title="Fraud %" value={`${(view.fraud_rate * 100).toFixed(2)}%`} subtitle="Of all events" />
           <KpiCard
+            icon={ArrowLeftRight}
+            title="Total transactions"
+            value={Number(view.total_transactions).toLocaleString()}
+            subtitle="Monitored volume"
+            tone="info"
+          />
+          <KpiCard
+            icon={ShieldAlert}
+            title="Fraud detected"
+            value={Number(view.flagged_transactions).toLocaleString()}
+            tone="danger"
+            subtitle="Open investigations"
+          />
+          <KpiCard
+            icon={Percent}
+            title="Fraud rate"
+            value={`${(view.fraud_rate * 100).toFixed(2)}%`}
+            tone="warning"
+            subtitle="Of all events"
+          />
+          <KpiCard
+            icon={ShieldCheck}
             title="Revenue protected"
             value={`$${Math.round(view.revenue_protected ?? 0).toLocaleString()}`}
+            tone="success"
             subtitle="Estimated blocked exposure"
           />
-          <KpiCard title="Active users" value={String(view.active_users ?? 0)} subtitle="Billable / tracked" />
-          <KpiCard title="Transaction volume" value={`$${Math.round(view.total_volume).toLocaleString()}`} subtitle="Rolling window" />
+          <KpiCard
+            icon={Users}
+            title="Active users"
+            value={Number(view.active_users ?? 0).toLocaleString()}
+            tone="violet"
+            subtitle="Billable / tracked"
+          />
+          <KpiCard
+            icon={Wallet}
+            title="Transaction volume"
+            value={`$${Math.round(view.total_volume).toLocaleString()}`}
+            tone="default"
+            subtitle="Rolling window"
+          />
         </div>
 
         <div className="grid gap-4 md:grid-cols-4">
-          <MetricPill icon={Wallet} label="Volume (24h)" value={`$${Math.round(view.total_volume).toLocaleString()}`} />
-          <MetricPill icon={AlertTriangle} label="High-risk queue" value={String(view.flagged_transactions)} />
-          <MetricPill icon={CheckCircle2} label="Auto-approved" value={String(view.approved_transactions)} />
-          <MetricPill icon={Activity} label="Decision latency" value="32 ms" />
+          <MetricPill icon={Wallet} label="Volume (24h)" value={`$${Math.round(view.total_volume).toLocaleString()}`} tone="cyan" />
+          <MetricPill icon={AlertTriangle} label="High-risk queue" value={String(view.flagged_transactions)} tone="red" />
+          <MetricPill icon={CheckCircle2} label="Auto-approved" value={String(view.approved_transactions)} tone="emerald" />
+          <MetricPill icon={Clock} label="Decision latency" value="32 ms" tone="violet" />
         </div>
 
         <ScrollReveal placeholderClassName="min-h-[300px]">
@@ -244,37 +310,49 @@ export default function DashboardPage() {
 
         <div className="grid gap-4 lg:grid-cols-2">
           <div className="glass-card p-4">
-            <h3 className="mb-3 text-base font-semibold">Live activity</h3>
+            <PanelTitle icon={Radio} title="Live activity" />
             <ul className="space-y-3 text-sm">
               {liveView.map((item, idx) => (
                 <li
                   key={`${item.title}-${idx}`}
-                  className="rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-800"
+                  className="flex gap-3 rounded-xl border border-slate-200/90 bg-white/50 px-3 py-2.5 dark:border-slate-800 dark:bg-slate-950/40"
                 >
-                  <p className="font-medium text-slate-900 dark:text-white">{item.title}</p>
-                  <p className="text-soft text-xs">{item.detail}</p>
-                  <p className="text-soft mt-1 text-[10px] uppercase">{item.time}</p>
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-cyan-500/10 text-cyan-600 dark:text-cyan-300">
+                    <Activity className="h-4 w-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="font-medium text-slate-900 dark:text-white">{item.title}</p>
+                    <p className="text-soft text-xs">{item.detail}</p>
+                    <p className="text-soft mt-1 text-[10px] uppercase tracking-wide">{item.time}</p>
+                  </div>
                 </li>
               ))}
             </ul>
           </div>
           <div className="glass-card p-4">
-            <h3 className="mb-3 text-base font-semibold">Alert feed</h3>
+            <PanelTitle icon={Bell} title="Alert feed" />
             <div className="space-y-2">
               {flaggedView.map((tx) => (
                 <div
                   key={tx.id}
-                  className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-800"
+                  className="flex items-center justify-between gap-3 rounded-xl border border-red-200/60 bg-gradient-to-r from-red-50/80 to-white/60 px-3 py-2.5 dark:border-red-500/20 dark:from-red-950/30 dark:to-slate-950/40"
                 >
-                  <div>
-                    <p className="text-sm font-medium text-slate-900 dark:text-white">
-                      TX #{tx.id} · User {tx.user_id}
-                    </p>
-                    <p className="text-soft text-xs">
-                      ${tx.amount.toFixed(2)} · {tx.location}
-                    </p>
+                  <div className="flex min-w-0 items-center gap-3">
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-red-500/15 text-red-600 dark:text-red-300">
+                      <CreditCard className="h-4 w-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-slate-900 dark:text-white">
+                        TX #{tx.id} · User {tx.user_id}
+                      </p>
+                      <p className="text-soft truncate text-xs">
+                        ${tx.amount.toFixed(2)} · {tx.location}
+                      </p>
+                    </div>
                   </div>
-                  <span className="text-sm font-semibold text-red-600 dark:text-danger">{tx.risk_score.toFixed(1)}</span>
+                  <span className="shrink-0 rounded-lg bg-red-500/15 px-2 py-1 text-sm font-bold text-red-600 dark:text-red-300">
+                    {tx.risk_score.toFixed(1)}
+                  </span>
                 </div>
               ))}
             </div>
@@ -282,7 +360,7 @@ export default function DashboardPage() {
         </div>
 
         <div className="glass-card p-4">
-          <h3 className="mb-3 text-base font-semibold">Recent transactions</h3>
+          <PanelTitle icon={ArrowLeftRight} title="Recent transactions" />
           <div className="w-full overflow-x-auto">
             <table className="w-full min-w-[640px] border-collapse text-sm">
               <thead>
@@ -311,16 +389,26 @@ export default function DashboardPage() {
 
         <div className="grid gap-4 lg:grid-cols-2">
           <div className="glass-card p-4">
-            <h3 className="mb-3 text-base font-semibold">Rule & model health</h3>
+            <PanelTitle icon={ShieldCheck} title="Rule & model health" />
             <div className="grid gap-2 text-sm">
               <HealthRow icon={CheckCircle2} label="Rule engine" value="Healthy" valueClass="text-emerald-600 dark:text-success" />
-              <HealthRow icon={Activity} label="ML bundle" value="fraud_model.joblib" />
+              <HealthRow
+                icon={Activity}
+                label="ML model"
+                value={
+                  modelMetrics?.pr_auc != null
+                    ? `Active · PR-AUC ${String(modelMetrics.pr_auc)}`
+                    : "Active"
+                }
+                valueClass="text-emerald-600 dark:text-success"
+              />
               <HealthRow icon={ShieldAlert} label="Drift monitor" value="Low drift" valueClass="text-amber-600 dark:text-warning" />
               <HealthRow icon={Users} label="Analyst staffing" value="Within SLA" valueClass="text-emerald-600 dark:text-success" />
             </div>
           </div>
+          {isStaff ? (
           <div className="glass-card p-4">
-            <h3 className="mb-3 text-base font-semibold">Audit trail</h3>
+            <PanelTitle icon={Activity} title="Audit trail" />
             <div className="w-full overflow-x-auto">
               <table className="w-full min-w-[560px] border-collapse text-sm">
                 <thead>
@@ -344,9 +432,21 @@ export default function DashboardPage() {
               </table>
             </div>
           </div>
+          ) : null}
         </div>
       </div>
     </AppShell>
+  );
+}
+
+function PanelTitle({ icon: Icon, title }: { icon: LucideIcon; title: string }) {
+  return (
+    <div className="mb-4 flex items-center gap-2.5">
+      <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-500/15 to-sky-500/10 text-cyan-700 dark:text-cyan-300">
+        <Icon className="h-4 w-4" strokeWidth={2.25} />
+      </div>
+      <h3 className="text-base font-semibold text-slate-900 dark:text-white">{title}</h3>
+    </div>
   );
 }
 
@@ -362,12 +462,14 @@ function HealthRow({
   valueClass?: string;
 }) {
   return (
-    <div className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-800">
-      <span className="flex items-center gap-2 text-slate-600 dark:text-slate-300">
-        <Icon className="h-4 w-4" />
-        {label}
+    <div className="flex items-center justify-between rounded-xl border border-slate-200/90 bg-white/40 px-3 py-2.5 dark:border-slate-800 dark:bg-slate-950/30">
+      <span className="flex items-center gap-2.5 text-slate-600 dark:text-slate-300">
+        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-500/10">
+          <Icon className="h-4 w-4 text-slate-600 dark:text-slate-300" strokeWidth={2.25} />
+        </span>
+        <span className="text-sm font-medium">{label}</span>
       </span>
-      <span className={`text-sm font-medium ${valueClass}`}>{value}</span>
+      <span className={`text-sm font-semibold ${valueClass}`}>{value}</span>
     </div>
   );
 }
@@ -380,18 +482,48 @@ function MetricPill({
   icon: Icon,
   label,
   value,
+  tone = "cyan",
 }: {
-  icon: typeof Activity;
+  icon: LucideIcon;
   label: string;
   value: string;
+  tone?: "cyan" | "red" | "emerald" | "violet";
 }) {
+  const tones = {
+    cyan: {
+      border: "border-cyan-200/70 dark:border-cyan-500/25",
+      bg: "from-cyan-500/8 to-white/90 dark:from-cyan-400/10 dark:to-slate-900/90",
+      icon: "bg-cyan-500/15 text-cyan-600 dark:text-cyan-300",
+    },
+    red: {
+      border: "border-red-200/70 dark:border-red-500/25",
+      bg: "from-red-500/8 to-white/90 dark:from-red-400/10 dark:to-slate-900/90",
+      icon: "bg-red-500/15 text-red-600 dark:text-red-300",
+    },
+    emerald: {
+      border: "border-emerald-200/70 dark:border-emerald-500/25",
+      bg: "from-emerald-500/8 to-white/90 dark:from-emerald-400/10 dark:to-slate-900/90",
+      icon: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-300",
+    },
+    violet: {
+      border: "border-violet-200/70 dark:border-violet-500/25",
+      bg: "from-violet-500/8 to-white/90 dark:from-violet-400/10 dark:to-slate-900/90",
+      icon: "bg-violet-500/15 text-violet-600 dark:text-violet-300",
+    },
+  };
+  const t = tones[tone];
+
   return (
-    <div className="fintech-panel px-4 py-3">
-      <div className="flex items-center gap-2">
-        <Icon className="h-4 w-4 text-slate-500 dark:text-slate-300" />
-        <span className="text-soft text-xs">{label}</span>
+    <div
+      className={`fintech-panel border bg-gradient-to-br px-4 py-3 transition hover:-translate-y-0.5 hover:shadow-lg ${t.border} ${t.bg}`}
+    >
+      <div className="flex items-center gap-2.5">
+        <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${t.icon}`}>
+          <Icon className="h-4 w-4" strokeWidth={2.25} />
+        </div>
+        <span className="text-soft text-xs font-medium">{label}</span>
       </div>
-      <p className="mt-2 text-lg font-semibold text-slate-900 dark:text-white">{value}</p>
+      <p className="mt-2 pl-[2.625rem] text-lg font-bold tracking-tight text-slate-900 dark:text-white">{value}</p>
     </div>
   );
 }

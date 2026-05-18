@@ -10,7 +10,7 @@ from ..schemas import LoginSchema, RegisterSchema
 
 auth_bp = Blueprint("auth", __name__, url_prefix="/auth")
 
-_ALLOWED_REGISTER_ROLES = frozenset({"user", "analyst"})
+_ALLOWED_REGISTER_ROLES = frozenset({"user", "analyst", "admin"})
 
 
 @auth_bp.post("/register")

@@ -28,8 +28,8 @@ export function LandingNav() {
           <a href="#demo" className="transition-colors duration-300 hover:text-slate-900 dark:hover:text-white">
             Product
           </a>
-          <a href="#team" className="transition-colors duration-300 hover:text-slate-900 dark:hover:text-white">
-            Team
+          <a href="#get-started" className="transition-colors duration-300 hover:text-slate-900 dark:hover:text-white">
+            Get started
           </a>
         </nav>
         <div className="flex items-center gap-2 sm:gap-3">
