@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
 
 export type KpiTone = "default" | "danger" | "success" | "warning" | "info" | "violet";
@@ -8,6 +9,7 @@ type KpiCardProps = {
   subtitle?: string;
   tone?: KpiTone;
   icon: LucideIcon;
+  href?: string;
 };
 
 const toneStyles: Record<
@@ -58,12 +60,12 @@ const toneStyles: Record<
   },
 };
 
-export function KpiCard({ title, value, subtitle, tone = "default", icon: Icon }: KpiCardProps) {
+export function KpiCard({ title, value, subtitle, tone = "default", icon: Icon, href }: KpiCardProps) {
   const s = toneStyles[tone];
 
-  return (
+  const inner = (
     <div
-      className={`group relative overflow-hidden rounded-2xl border bg-gradient-to-br from-white/95 to-slate-50/90 p-4 shadow-md shadow-slate-200/40 transition hover:-translate-y-0.5 hover:shadow-lg dark:from-slate-900/95 dark:to-slate-950/90 dark:shadow-black/30 ${s.border}`}
+      className={`group relative overflow-hidden rounded-2xl border bg-gradient-to-br from-white/95 to-slate-50/90 p-4 shadow-md shadow-slate-200/40 transition hover:-translate-y-0.5 hover:shadow-lg dark:from-slate-900/95 dark:to-slate-950/90 dark:shadow-black/30 ${s.border} ${href ? "cursor-pointer" : ""}`}
     >
       <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${s.glow}`} />
       <div className="relative flex items-start justify-between gap-3">
@@ -79,5 +81,21 @@ export function KpiCard({ title, value, subtitle, tone = "default", icon: Icon }
         </div>
       </div>
     </div>
+  );
+
+  if (!href) return inner;
+
+  if (href.startsWith("#")) {
+    return (
+      <a href={href} className="block rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50">
+        {inner}
+      </a>
+    );
+  }
+
+  return (
+    <Link href={href} className="block rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50">
+      {inner}
+    </Link>
   );
 }

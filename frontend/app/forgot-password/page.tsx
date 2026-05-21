@@ -25,8 +25,10 @@ export default function ForgotPasswordPage() {
       body: JSON.stringify({ email }),
     });
     const data = await res.json();
-    setMsg(data.message || "If the email exists, an OTP was generated.");
-    if (data.dev_otp) setMsg((m) => `${m} (dev OTP: ${data.dev_otp})`);
+    setMsg(
+      data.message ||
+        "If an account exists for this email, you will receive a verification code shortly."
+    );
   };
 
   return (

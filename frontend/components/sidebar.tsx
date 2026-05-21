@@ -21,8 +21,10 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
+import { SidebarNavSkeleton } from "@/components/skeletons";
 import { ROLE_LABELS, navForRole, type NavItem } from "@/lib/roles";
 import { useClientSession } from "@/lib/use-client-session";
+import { useHydrated } from "@/lib/use-hydrated";
 import { useUserRole } from "@/lib/use-user-role";
 
 const ICONS: Record<string, LucideIcon> = {
@@ -91,8 +93,13 @@ function AccountNav() {
 }
 
 export function Sidebar({ className = "" }: { className?: string }) {
+  const hydrated = useHydrated();
   const role = useUserRole();
   const { workspace, admin } = navForRole(role);
+
+  if (!hydrated) {
+    return <SidebarNavSkeleton className={className} />;
+  }
 
   return (
     <aside

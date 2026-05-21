@@ -30,6 +30,11 @@ def ensure_demo_users() -> list[int]:
             user.set_password("DemoPass123!")
             db.session.add(user)
             db.session.flush()
+        else:
+            user.role = role
+            user.full_name = name or user.full_name
+            user.email_verified = True
+            user.is_active = True
         ids.append(user.id)
 
     # Any other registered users
@@ -64,10 +69,10 @@ def seed_transactions_if_needed(*, min_count: int = 80) -> int:
         db.session.add(
             AuditLog(
                 actor_user_id=user_ids[0] if user_ids else None,
-                action="demo_seed",
+                action="dataset_seed",
                 entity="system",
                 entity_id="seed",
-                details='{"message": "Demo dataset initialized"}',
+                details='{"message": "Sample transaction data initialized"}',
                 created_at=datetime.utcnow() - timedelta(hours=2),
             )
         )

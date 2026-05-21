@@ -12,7 +12,13 @@ import {
 import { Bell, BellOff, X } from "lucide-react";
 
 import { AuthError, fetchWithAuth, getStoredToken } from "@/lib/api";
-import { isSoundMuted, playTransactionAlert, setSoundMuted } from "@/lib/transaction-sound";
+import {
+  isHighRiskTransaction,
+  isSoundMuted,
+  playHighRiskWarning,
+  playTransactionAlert,
+  setSoundMuted,
+} from "@/lib/transaction-sound";
 import type { TransactionRow } from "@/lib/types";
 
 type ToastItem = {
@@ -82,15 +88,18 @@ export function TransactionNotificationProvider({ children }: { children: React.
   const handleNewTransactions = useCallback(
     async (items: TransactionRow[], playSound: boolean) => {
       if (!items.length) return;
+      let hasHighRisk = false;
       for (const tx of items) {
         if (tx.id > lastIdRef.current) {
           lastIdRef.current = tx.id;
         }
+        if (!isHighRiskTransaction(tx)) continue;
+        hasHighRisk = true;
         pushToast(tx);
         showBrowserNotification(tx);
       }
-      if (playSound) {
-        await playTransactionAlert();
+      if (playSound && hasHighRisk) {
+        await playHighRiskWarning();
       }
     },
     [pushToast]
@@ -209,7 +218,7 @@ export function NotificationSoundToggle() {
       onClick={() => {
         const next = !muted;
         setMuted(next);
-        if (!next) void playTransactionAlert();
+        if (!next) void playHighRiskWarning();
       }}
       className="rounded-lg border border-slate-200/90 bg-white/70 p-2 text-slate-700 shadow-sm transition hover:bg-white dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-200"
       aria-label={muted ? "Unmute transaction alerts" : "Mute transaction alerts"}
@@ -235,7 +244,7 @@ function TransactionToastStack({
       aria-live="polite"
     >
       {toasts.map(({ id, tx }) => {
-        const high = tx.status === "flagged" || tx.risk_score >= 60;
+        const high = isHighRiskTransaction(tx);
         return (
           <div
             key={id}

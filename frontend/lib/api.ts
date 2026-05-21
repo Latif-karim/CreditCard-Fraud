@@ -107,6 +107,23 @@ export async function postWithAuth<T>(path: string, body: unknown, token?: strin
   return data as T;
 }
 
+export async function deleteWithAuth<T>(path: string, token?: string): Promise<T> {
+  const auth = token ?? getStoredToken();
+  const response = await fetch(`${API_BASE}${path}`, {
+    method: "DELETE",
+    headers: auth ? { Authorization: `Bearer ${auth}` } : {},
+  });
+  const data = await response.json().catch(() => ({}));
+  if (response.status === 401) {
+    handleUnauthorized();
+    throw new AuthError();
+  }
+  if (!response.ok) {
+    throw new Error(formatApiError(response.status, data));
+  }
+  return data as T;
+}
+
 export async function patchWithAuth<T>(path: string, body: unknown, token?: string): Promise<T> {
   const auth = token ?? getStoredToken();
   const response = await fetch(`${API_BASE}${path}`, {

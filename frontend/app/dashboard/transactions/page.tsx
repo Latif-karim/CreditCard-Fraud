@@ -1,38 +1,39 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Clock3, Search, ShieldAlert } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ChevronRight, Clock3, ShieldAlert } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
 import { RoleGuard } from "@/components/role-guard";
+import { CardGridSkeleton, TableSkeleton } from "@/components/skeletons";
 import { fetchWithAuth } from "@/lib/api";
+import { monitoringHref, transactionDetailHref } from "@/lib/transaction-links";
 import type { FlaggedTransaction } from "@/lib/types";
 
 export default function TransactionsPage() {
+  const router = useRouter();
   const [transactions, setTransactions] = useState<FlaggedTransaction[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const token = localStorage.getItem("access_token") || "";
+    setLoading(true);
     fetchWithAuth<FlaggedTransaction[]>("/transactions/flagged", token)
       .then(setTransactions)
-      .catch(() => {
-        setTransactions([]);
-      });
+      .catch(() => setTransactions([]))
+      .finally(() => setLoading(false));
   }, []);
-
-  const txView =
-    transactions.length > 0
-      ? transactions
-      : [
-          { id: 9001, user_id: 302, amount: 1340.2, location: "London", risk_score: 88.1, created_at: "" },
-          { id: 9002, user_id: 118, amount: 925.5, location: "Berlin", risk_score: 76.4, created_at: "" },
-          { id: 9003, user_id: 874, amount: 4900, location: "Accra", risk_score: 82.9, created_at: "" },
-          { id: 9004, user_id: 201, amount: 210.6, location: "Nairobi", risk_score: 67.5, created_at: "" },
-        ];
 
   return (
     <RoleGuard allow={["analyst", "admin"]} title="Flagged queue">
     <AppShell title="Flagged Transactions" subtitle="Investigation Queue">
+      {loading ? (
+        <div className="space-y-5">
+          <CardGridSkeleton cards={3} />
+          <TableSkeleton rows={6} cols={5} />
+        </div>
+      ) : (
       <div className="space-y-5">
         <div className="grid gap-4 md:grid-cols-3">
           <InfoTile label="Open Cases" value="38" icon={ShieldAlert} />
@@ -40,10 +41,14 @@ export default function TransactionsPage() {
           <InfoTile label="Escalation Rate" value="7.2%" icon={Clock3} />
         </div>
         <div className="glass-card p-4">
-          <div className="mb-4 flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-slate-400">
-            <Search className="h-4 w-4" />
-            Search by transaction ID, user, location (UI placeholder)
-          </div>
+          <p className="text-soft mb-3 text-xs">Click a row for explainability, or open full monitoring.</p>
+          <button
+            type="button"
+            onClick={() => router.push(monitoringHref({ status: "flagged" }))}
+            className="mb-4 text-xs font-medium text-sky-700 underline dark:text-sky-400"
+          >
+            Open in transaction monitoring →
+          </button>
           <div className="w-full overflow-x-auto">
             <table className="w-full min-w-[640px] border-collapse text-sm">
               <thead>
@@ -56,9 +61,21 @@ export default function TransactionsPage() {
                 </tr>
               </thead>
               <tbody>
-                {txView.map((tx) => (
-                  <tr key={tx.id} className="border-white/10 border-b last:border-0">
-                    <td className="py-2">{tx.id}</td>
+                {transactions.map((tx) => (
+                  <tr
+                    key={tx.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => router.push(transactionDetailHref(tx.id))}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        router.push(transactionDetailHref(tx.id));
+                      }
+                    }}
+                    className="cursor-pointer border-white/10 border-b transition hover:bg-slate-50/80 last:border-0 dark:hover:bg-slate-800/50"
+                  >
+                    <td className="py-2 font-medium">#{tx.id}</td>
                     <td className="py-2">{tx.user_id}</td>
                     <td className="py-2">${tx.amount.toFixed(2)}</td>
                     <td className="py-2">{tx.location}</td>
@@ -71,10 +88,11 @@ export default function TransactionsPage() {
             </table>
           </div>
           {!transactions.length ? (
-            <p className="text-soft mt-3 text-xs">Showing placeholder records until backend returns flagged data.</p>
+            <p className="text-soft mt-3 text-sm">No flagged transactions in the queue.</p>
           ) : null}
         </div>
       </div>
+      )}
     </AppShell>
     </RoleGuard>
   );

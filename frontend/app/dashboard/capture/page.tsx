@@ -5,6 +5,7 @@ import type { LucideIcon } from "lucide-react";
 import { Activity, Database, Play, Square, Zap } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
+import { FormPanelSkeleton, Skeleton } from "@/components/skeletons";
 import { useTransactionNotifications } from "@/components/transaction-notification-provider";
 import { getClientUserId, setClientSession } from "@/lib/auth-session";
 import { fetchWithAuth, getStoredToken, postWithAuth } from "@/lib/api";
@@ -67,18 +68,19 @@ export default function CapturePage() {
       setReady(true);
       return;
     }
+    const uid = getClientUserId();
+    if (uid) setUserId(String(uid));
+    setRole(localStorage.getItem("role") || "user");
+    setReady(true);
+
     try {
       const me = await fetchWithAuth<MeResponse>("/auth/me", token);
       setRole(me.role);
       setUserId(String(me.id));
-      localStorage.setItem("role", me.role);
       setClientSession(token, me.role, me.id);
     } catch {
-      const uid = getClientUserId();
-      if (uid) setUserId(String(uid));
-      setRole(localStorage.getItem("role") || "user");
+      /* keep cached role/user from storage */
     }
-    setReady(true);
   }, []);
 
   const refreshSim = useCallback(async () => {
@@ -133,7 +135,7 @@ export default function CapturePage() {
         risk_score: res.risk_score,
         confidence: res.confidence,
       });
-      setMsg(`Captured TX #${res.transaction_id} · risk ${res.risk_score.toFixed(1)} · ${res.status}`);
+      setMsg(`Transaction #${res.transaction_id} · risk ${res.risk_score.toFixed(1)} · ${res.status}`);
     } catch (err) {
       setMsg((err as Error).message);
     } finally {
@@ -162,7 +164,7 @@ export default function CapturePage() {
         );
         setSim(status);
         setAutoStream(true);
-        setMsg("Stream started — first transaction generated immediately, then every 30s.");
+        setMsg("Continuous monitoring started. New transactions will be scored automatically.");
       }
       await refreshSim();
     } catch (err) {
@@ -180,7 +182,7 @@ export default function CapturePage() {
       return;
     }
     setStreamBusy(true);
-    setMsg("Generating one synthetic transaction…");
+    setMsg("Processing transaction…");
     try {
       const res = await postWithAuth<IngestResult>("/transactions/simulator/tick", {}, token);
       setLastResult(res);
@@ -192,7 +194,7 @@ export default function CapturePage() {
         risk_score: res.risk_score,
         confidence: res.confidence,
       });
-      setMsg(`Synthetic TX #${res.transaction_id} created · risk ${res.risk_score.toFixed(1)}`);
+      setMsg(`Transaction #${res.transaction_id} processed · risk ${res.risk_score.toFixed(1)}`);
       await refreshSim();
     } catch (err) {
       setMsg((err as Error).message);
@@ -205,31 +207,34 @@ export default function CapturePage() {
 
   if (!ready) {
     return (
-      <AppShell title="Transaction capture" subtitle="Ingest & live stream">
-        <p className="text-soft text-sm">Loading session…</p>
+      <AppShell title="Transactions" subtitle="Submit and monitor card activity">
+        <div className="grid gap-4 lg:grid-cols-2">
+          <Skeleton className="col-span-full h-24 w-full rounded-2xl lg:col-span-2" />
+          <Skeleton className="h-40 w-full rounded-2xl" />
+          <FormPanelSkeleton />
+        </div>
       </AppShell>
     );
   }
 
   return (
-    <AppShell title="Transaction capture" subtitle="Ingest & live stream">
+    <AppShell title="Transactions" subtitle="Submit and monitor card activity">
       <div className="grid gap-4 lg:grid-cols-2">
         <div className="fintech-panel col-span-full p-5 lg:col-span-2">
-          <SectionTitle icon={Database} title="How data enters FraudShield" />
+          <SectionTitle icon={Database} title="Transaction intake" />
           <p className="text-soft mt-3 text-sm leading-relaxed">
-            Send card events to{" "}
-            <code className="rounded bg-slate-100 px-1 py-0.5 text-xs dark:bg-slate-800">POST /transactions/ingest</code>
-            , use manual entry below, or start the synthetic stream (every 30 seconds).
+            Submit individual payments for real-time scoring, or enable continuous monitoring to process incoming
+            card activity as it arrives.
           </p>
         </div>
 
         {canPickUser ? (
         <div className="fintech-panel p-5">
-          <SectionTitle icon={Activity} title="Live stream (30s)" />
+          <SectionTitle icon={Activity} title="Continuous monitoring" />
           <p className="text-soft mt-2 text-xs">
             {sim?.running
-              ? `Running · ${sim.ticks} events · last ${sim.last_tick_at ?? "—"}`
-              : "Paused — start to auto-generate realistic transactions"}
+              ? `Active · ${sim.ticks} transactions processed · last event ${sim.last_tick_at ?? "—"}`
+              : "Inactive — start monitoring to score new transactions automatically"}
           </p>
           {sim?.last_error ? <p className="mt-2 text-xs text-red-600 dark:text-red-400">{sim.last_error}</p> : null}
           <div className="mt-4 flex flex-wrap gap-2">
@@ -240,7 +245,7 @@ export default function CapturePage() {
               className="btn-fintech-secondary flex-1 disabled:opacity-60"
             >
               {autoStream ? <Square className="mr-2 inline h-4 w-4" /> : <Play className="mr-2 inline h-4 w-4" />}
-              {streamBusy ? "…" : autoStream ? "Stop stream" : "Start stream"}
+              {streamBusy ? "…" : autoStream ? "Stop monitoring" : "Start monitoring"}
             </button>
             <button
               type="button"
@@ -249,22 +254,22 @@ export default function CapturePage() {
               className="btn-fintech-primary flex-1 disabled:opacity-60"
             >
               <Zap className="mr-2 inline h-4 w-4" />
-              Generate now
+              Process now
             </button>
           </div>
         </div>
         ) : (
           <div className="fintech-panel p-5 text-sm text-slate-600 dark:text-slate-300">
-            <SectionTitle icon={Activity} title="Live stream" />
+            <SectionTitle icon={Activity} title="Continuous monitoring" />
             <p className="text-soft mt-2 text-xs leading-relaxed">
-              Auto-generation every 30 seconds is available to analysts and administrators. As a cardholder, use manual
-              entry below to simulate your own payments.
+              Automated transaction monitoring is available to analysts and administrators. Submit your own payments
+              using the form below.
             </p>
           </div>
         )}
 
         <form onSubmit={submitManual} className="fintech-panel col-span-full space-y-4 p-5 lg:col-span-2">
-          <SectionTitle icon={Zap} title="Manual transaction" />
+          <SectionTitle icon={Zap} title="Submit transaction" />
           <div className="grid gap-3 sm:grid-cols-2">
             {canPickUser ? (
               <label className="block text-sm">

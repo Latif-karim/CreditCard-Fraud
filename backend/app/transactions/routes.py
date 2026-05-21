@@ -249,6 +249,8 @@ def transaction_action(transaction_id: int):
             return jsonify({"error": "Forbidden"}), 403
         user = User.query.get(tx.user_id)
         if user:
+            if user.role == "admin":
+                return jsonify({"error": "Administrator accounts cannot be frozen"}), 400
             user.is_active = False
     else:
         return jsonify({"error": "Invalid action"}), 400

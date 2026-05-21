@@ -6,7 +6,9 @@ from .extensions import bcrypt, db
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(120), unique=True, nullable=False)
-    password_hash = db.Column(db.String(128), nullable=False)
+    password_hash = db.Column(db.String(128), nullable=True)
+    auth_provider = db.Column(db.String(20), default="email", nullable=True)
+    oauth_subject = db.Column(db.String(128), nullable=True)
     role = db.Column(db.String(20), default="user", nullable=False)
     full_name = db.Column(db.String(120), nullable=True)
     is_active = db.Column(db.Boolean, default=True, nullable=False)
@@ -22,7 +24,12 @@ class User(db.Model):
         self.password_hash = bcrypt.generate_password_hash(raw_password).decode("utf-8")
 
     def check_password(self, raw_password: str) -> bool:
+        if not self.password_hash:
+            return False
         return bcrypt.check_password_hash(self.password_hash, raw_password)
+
+    def uses_social_login(self) -> bool:
+        return self.auth_provider in ("google", "github") and bool(self.oauth_subject)
 
 
 class UserSession(db.Model):

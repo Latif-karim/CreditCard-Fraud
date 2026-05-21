@@ -5,6 +5,7 @@ from marshmallow import ValidationError
 
 from .admin.routes import admin_bp
 from .alerts.routes import alerts_bp
+from .auth.oauth_routes import init_oauth, oauth_bp
 from .auth.routes import auth_bp
 from .config import Config
 from .dashboard.routes import dashboard_bp
@@ -24,12 +25,14 @@ def create_app(config_class=Config):
     bcrypt.init_app(app)
     Migrate(app, db)
     CORS(app, resources={r"/*": {"origins": "*"}})
+    init_oauth(app)
 
     @app.errorhandler(ValidationError)
     def handle_validation_error(err):
         return jsonify({"error": "Validation failed", "details": err.messages}), 400
 
     app.register_blueprint(auth_bp)
+    app.register_blueprint(oauth_bp)
     app.register_blueprint(transactions_bp)
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(admin_bp)

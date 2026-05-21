@@ -120,6 +120,34 @@ export type AdminUser = {
   email_verified: boolean;
 };
 
+export type AdminTransactionRow = {
+  id: number;
+  user_id: number;
+  amount: number;
+  location: string;
+  merchant: string | null;
+  status: string;
+  risk_score: number;
+  created_at: string;
+};
+
+export type AdminTransactionsPage = {
+  items: AdminTransactionRow[];
+  page: number;
+  per_page: number;
+  total: number;
+  pages: number;
+};
+
+export type AdminSystemStats = {
+  users: number;
+  transactions: number;
+  fraud_decisions: number;
+  alerts: number;
+  notifications: number;
+  audit_logs: number;
+};
+
 export type FraudRule = {
   id: number;
   name: string;

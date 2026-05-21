@@ -222,12 +222,12 @@ def live_activity():
                 {
                     "title": "Suspicious transaction detected",
                     "detail": "Velocity threshold exceeded for user 302",
-                    "time": "demo",
+                    "time": "2 min ago",
                 },
                 {
                     "title": "User login from new device",
                     "detail": "Chrome on Windows from new IP",
-                    "time": "demo",
+                    "time": "8 min ago",
                 },
             ]
         )

@@ -4,6 +4,8 @@ import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
+import { AuthDivider, AuthPageShell, authBtnClass, authFieldClass, authLabelClass } from "@/components/auth-page-shell";
+import { SocialLoginButtons, getOAuthErrorMessage } from "@/components/social-login-buttons";
 import { AuthError, fetchWithAuth, getApiBase, getStoredToken } from "@/lib/api";
 import { clearClientSession, setClientSession } from "@/lib/auth-session";
 
@@ -21,6 +23,9 @@ export default function LoginPage() {
       setResult("Your session expired. Please sign in again.");
       return;
     }
+    const oauthErr = getOAuthErrorMessage(qs.get("error"));
+    if (oauthErr) setResult(oauthErr);
+
     const token = getStoredToken();
     if (!token) return;
 
@@ -52,7 +57,11 @@ export default function LoginPage() {
         const detail =
           data.details?.email?.[0] ||
           (data.details ? JSON.stringify(data.details) : null);
-        setResult(detail || data.error || "Login failed");
+        setResult(
+          data.social_login
+            ? data.error || "Use Google or GitHub to sign in to this account."
+            : detail || data.error || "Login failed"
+        );
         return;
       }
       setClientSession(data.access_token, data.role, data.user_id);
@@ -67,51 +76,58 @@ export default function LoginPage() {
   };
 
   return (
-    <main className="min-h-screen px-4 py-10 transition-opacity duration-500">
-      <div className="mx-auto max-w-md">
-        <p className="text-soft mb-6 text-center text-xs uppercase tracking-[0.2em]">Secure access</p>
-        <div className="glass-card p-6 shadow-xl shadow-slate-200/30 dark:shadow-black/20">
-          <h1 className="mb-2 text-3xl font-semibold text-slate-900 dark:text-white">Welcome back</h1>
-          <p className="text-soft mb-5 text-sm">
-            No account?{" "}
-            <Link href="/register" className="font-medium text-sky-700 underline decoration-sky-700/30 underline-offset-2 transition hover:decoration-sky-700 dark:text-sky-400 dark:decoration-sky-400/30">
-              Register
-            </Link>
-          </p>
-          <form onSubmit={onSubmit}>
-            <label className="text-sm text-slate-700 dark:text-slate-200">Email</label>
-            <input
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-400 dark:border-slate-700 dark:bg-slate-900"
-            />
-            <label className="mt-4 block text-sm text-slate-700 dark:text-slate-200">Password</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-400 dark:border-slate-700 dark:bg-slate-900"
-            />
-            <div className="mt-2 text-right">
-              <Link href="/forgot-password" className="text-xs text-sky-700 underline decoration-sky-700/25 underline-offset-2 dark:text-sky-400">
-                Forgot password?
-              </Link>
-            </div>
-            <button
-              type="submit"
-              className="mt-5 w-full rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition-opacity duration-300 hover:opacity-90 dark:bg-white dark:text-slate-900"
-            >
-              Sign in
-            </button>
-            {result ? <p className="text-soft mt-3 text-sm">{result}</p> : null}
-          </form>
-        </div>
-        <p className="text-soft mt-8 text-center text-xs">
-          <Link href="/" className="transition hover:text-slate-600 dark:hover:text-slate-300">
-            ← Back to home
+    <AuthPageShell
+      title="Welcome back"
+      subtitle={
+        <>
+          No account?{" "}
+          <Link
+            href="/register"
+            className="font-medium text-sky-700 underline decoration-sky-700/30 underline-offset-2 dark:text-sky-400"
+          >
+            Register
           </Link>
-        </p>
-      </div>
-    </main>
+        </>
+      }
+    >
+      <form onSubmit={onSubmit} className="space-y-4">
+        <div>
+          <label className={authLabelClass}>Email</label>
+          <input
+            type="email"
+            required
+            autoComplete="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className={authFieldClass}
+          />
+        </div>
+        <div>
+          <div className="flex items-center justify-between gap-2">
+            <label className={authLabelClass}>Password</label>
+            <Link
+              href="/forgot-password"
+              className="text-[0.65rem] text-sky-700 underline decoration-sky-700/25 dark:text-sky-400"
+            >
+              Forgot?
+            </Link>
+          </div>
+          <input
+            type="password"
+            required
+            autoComplete="current-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className={authFieldClass}
+          />
+        </div>
+        <button type="submit" className={authBtnClass}>
+          Sign in
+        </button>
+        {result ? <p className="text-soft line-clamp-2 text-xs leading-snug">{result}</p> : null}
+      </form>
+      <AuthDivider />
+      <SocialLoginButtons />
+    </AuthPageShell>
   );
 }

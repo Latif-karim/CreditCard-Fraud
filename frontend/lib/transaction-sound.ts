@@ -1,4 +1,11 @@
-/** Short fintech-style alert chime via Web Audio (no asset file required). */
+/** Web Audio alerts (no asset files). */
+
+/** Matches backend fraud flag threshold (score >= 60). */
+export const HIGH_RISK_SCORE_THRESHOLD = 60;
+
+export function isHighRiskTransaction(tx: { status?: string; risk_score?: number }): boolean {
+  return tx.status === "flagged" || (tx.risk_score ?? 0) >= HIGH_RISK_SCORE_THRESHOLD;
+}
 
 export function isSoundMuted(): boolean {
   if (typeof window === "undefined") return false;
@@ -58,4 +65,45 @@ export async function playTransactionAlert(): Promise<void> {
 
   playTone(880, now, 0.12);
   playTone(1174.66, now + 0.1, 0.18);
+}
+
+/** Urgent triple-beep for suspicious / high-risk transactions. */
+export async function playHighRiskWarning(): Promise<void> {
+  if (isSoundMuted()) return;
+  const ctx = getCtx();
+  if (!ctx) return;
+
+  if (ctx.state === "suspended") {
+    try {
+      await ctx.resume();
+    } catch {
+      return;
+    }
+  }
+
+  const now = ctx.currentTime;
+  const master = ctx.createGain();
+  master.gain.setValueAtTime(0.0001, now);
+  master.gain.exponentialRampToValueAtTime(0.55, now + 0.02);
+  master.gain.exponentialRampToValueAtTime(0.0001, now + 1.1);
+  master.connect(ctx.destination);
+
+  const playBeep = (freq: number, start: number) => {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "square";
+    osc.frequency.setValueAtTime(freq, start);
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.exponentialRampToValueAtTime(0.45, start + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.22);
+    osc.connect(gain);
+    gain.connect(master);
+    osc.start(start);
+    osc.stop(start + 0.28);
+  };
+
+  playBeep(440, now);
+  playBeep(554.37, now + 0.28);
+  playBeep(440, now + 0.56);
+  playBeep(659.25, now + 0.84);
 }

@@ -25,7 +25,7 @@ export function LandingNav() {
           <a href="#stats" className="transition-colors duration-300 hover:text-slate-900 dark:hover:text-white">
             Impact
           </a>
-          <a href="#demo" className="transition-colors duration-300 hover:text-slate-900 dark:hover:text-white">
+          <a href="#product" className="transition-colors duration-300 hover:text-slate-900 dark:hover:text-white">
             Product
           </a>
           <a href="#get-started" className="transition-colors duration-300 hover:text-slate-900 dark:hover:text-white">

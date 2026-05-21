@@ -5,21 +5,29 @@ import { Mail } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
 import { RoleGuard } from "@/components/role-guard";
+import { ListSkeleton } from "@/components/skeletons";
 import { fetchWithAuth, patchWithAuth } from "@/lib/api";
 import type { FraudNotification } from "@/lib/types";
 
 export default function AlertsPage() {
   const [items, setItems] = useState<FraudNotification[]>([]);
   const [emails, setEmails] = useState<{ id: number; recipient: string; status: string; created_at: string }[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const token = localStorage.getItem("access_token") || "";
-    fetchWithAuth<FraudNotification[]>("/alerts/notifications", token)
-      .then(setItems)
-      .catch(() => setItems([]));
-    fetchWithAuth<{ id: number; recipient: string; status: string; created_at: string }[]>("/alerts/email-log", token)
-      .then(setEmails)
-      .catch(() => setEmails([]));
+    setLoading(true);
+    Promise.all([
+      fetchWithAuth<FraudNotification[]>("/alerts/notifications", token).catch(() => [] as FraudNotification[]),
+      fetchWithAuth<{ id: number; recipient: string; status: string; created_at: string }[]>("/alerts/email-log", token).catch(
+        () => [] as { id: number; recipient: string; status: string; created_at: string }[]
+      ),
+    ])
+      .then(([notifs, log]) => {
+        setItems(notifs);
+        setEmails(log);
+      })
+      .finally(() => setLoading(false));
   }, []);
 
   const mark = async (id: number, read: boolean) => {
@@ -37,6 +45,12 @@ export default function AlertsPage() {
   return (
     <RoleGuard allow={["analyst", "admin"]} title="Alerts">
     <AppShell title="Alerts & notifications" subtitle="Fraud operations inbox">
+      {loading ? (
+        <div className="grid gap-4 lg:grid-cols-2">
+          <ListSkeleton items={4} />
+          <ListSkeleton items={4} />
+        </div>
+      ) : (
       <div className="grid gap-4 lg:grid-cols-2">
         <div className="glass-card p-4">
           <h3 className="mb-3 text-base font-semibold">In-app fraud alerts</h3>
@@ -84,6 +98,7 @@ export default function AlertsPage() {
           </ul>
         </div>
       </div>
+      )}
     </AppShell>
     </RoleGuard>
   );

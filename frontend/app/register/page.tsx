@@ -4,12 +4,17 @@ import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
+import { AuthPageShell, authBtnClass, authFieldClass, authLabelClass } from "@/components/auth-page-shell";
+import { SocialLoginButtons } from "@/components/social-login-buttons";
 import { getApiBase } from "@/lib/api";
 import { mirrorSessionCookieFromStorage, setClientSession } from "@/lib/auth-session";
-import { ROLE_DESCRIPTIONS, ROLE_LABELS, type AppRole } from "@/lib/roles";
+import { ROLE_LABELS, type AppRole } from "@/lib/roles";
+
+type RegisterTab = "email" | "social";
 
 export default function RegisterPage() {
   const router = useRouter();
+  const [tab, setTab] = useState<RegisterTab>("email");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
@@ -54,81 +59,106 @@ export default function RegisterPage() {
     router.push("/login");
   };
 
+  const tabClass = (active: boolean) =>
+    `flex-1 rounded px-2 py-1.5 text-xs font-medium transition ${
+      active
+        ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-white"
+        : "text-slate-500 dark:text-slate-400"
+    }`;
+
   return (
-    <main className="min-h-screen px-4 py-10 transition-opacity duration-500">
-      <div className="mx-auto max-w-md">
-        <p className="text-soft mb-6 text-center text-xs uppercase tracking-[0.2em]">Create account</p>
-        <div className="glass-card p-6 shadow-xl shadow-slate-200/30 dark:shadow-black/20">
-          <h1 className="text-3xl font-semibold text-slate-900 dark:text-white">Register</h1>
-          <p className="text-soft mt-2 text-sm">
-            Already have access?{" "}
-            <Link href="/login" className="font-medium text-sky-700 underline decoration-sky-700/30 underline-offset-2 dark:text-sky-400">
-              Sign in
-            </Link>
-          </p>
-          <form className="mt-6 space-y-3" onSubmit={onSubmit}>
-            <div>
-              <label className="text-sm">Full name</label>
-              <input
-                className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-              />
-            </div>
-            <div>
-              <label className="text-sm">Email</label>
-              <input
-                type="email"
-                required
-                className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
-            </div>
-            <div>
-              <label className="text-sm">Password (8+ chars)</label>
-              <input
-                type="password"
-                required
-                minLength={8}
-                className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </div>
-            <div>
-              <label className="text-sm">Role</label>
-              <select
-                className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
-                value={role}
-                onChange={(e) => setRole(e.target.value as AppRole)}
-              >
-                <option value="user">{ROLE_LABELS.user}</option>
-                <option value="analyst">{ROLE_LABELS.analyst}</option>
-                <option value="admin">{ROLE_LABELS.admin}</option>
-              </select>
-              <p className="text-soft mt-1.5 text-xs leading-relaxed">{ROLE_DESCRIPTIONS[role]}</p>
-              {role === "admin" ? (
-                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                  Includes user management, fraud rules, and platform settings.
-                </p>
-              ) : null}
-            </div>
-            <button
-              type="submit"
-              className="w-full rounded-lg bg-slate-900 py-2.5 text-sm font-semibold text-white transition-opacity duration-300 hover:opacity-90 dark:bg-white dark:text-slate-900"
-            >
-              Create account
-            </button>
-            {msg ? <p className="text-soft text-sm">{msg}</p> : null}
-          </form>
-        </div>
-        <p className="text-soft mt-8 text-center text-xs">
-          <Link href="/" className="transition hover:text-slate-600 dark:hover:text-slate-300">
-            ← Back to home
+    <AuthPageShell
+      tall
+      title="Create account"
+      subtitle={
+        <>
+          Have an account?{" "}
+          <Link
+            href="/login"
+            className="font-medium text-sky-700 underline decoration-sky-700/25 dark:text-sky-400"
+          >
+            Sign in
           </Link>
-        </p>
+        </>
+      }
+    >
+      <div className="mb-3 flex gap-1 rounded-md border border-slate-200/80 bg-slate-50 p-1 dark:border-slate-700/50 dark:bg-slate-800/50">
+        <button type="button" onClick={() => setTab("email")} className={tabClass(tab === "email")}>
+          Email
+        </button>
+        <button type="button" onClick={() => setTab("social")} className={tabClass(tab === "social")}>
+          Social
+        </button>
       </div>
-    </main>
+
+      {tab === "email" ? (
+        <form className="space-y-4" onSubmit={onSubmit}>
+          <div>
+            <label className={authLabelClass}>Full name</label>
+            <input
+              className={authFieldClass}
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              autoComplete="name"
+            />
+          </div>
+          <div>
+            <label className={authLabelClass}>Email</label>
+            <input
+              type="email"
+              required
+              className={authFieldClass}
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              autoComplete="email"
+            />
+          </div>
+          <div>
+            <label className={authLabelClass}>Password</label>
+            <input
+              type="password"
+              required
+              minLength={8}
+              placeholder="8+ characters"
+              className={authFieldClass}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="new-password"
+            />
+          </div>
+          <div>
+            <label className={authLabelClass}>Role</label>
+            <select
+              className={authFieldClass}
+              value={role}
+              title="Cardholder, analyst, or admin"
+              onChange={(e) => setRole(e.target.value as AppRole)}
+            >
+              <option value="user">{ROLE_LABELS.user}</option>
+              <option value="analyst">{ROLE_LABELS.analyst}</option>
+              <option value="admin">{ROLE_LABELS.admin}</option>
+            </select>
+          </div>
+          <button type="submit" className={authBtnClass}>
+            Create account
+          </button>
+          {msg ? <p className="text-soft line-clamp-2 text-[0.65rem]">{msg}</p> : null}
+          <button
+            type="button"
+            onClick={() => setTab("social")}
+            className="w-full text-center text-[0.6rem] text-sky-700 underline decoration-sky-700/20 dark:text-sky-400"
+          >
+            Or Google / GitHub
+          </button>
+        </form>
+      ) : (
+        <div className="space-y-4 py-2">
+          <p className="text-soft text-xs leading-relaxed">
+            Creates a cardholder account. Use Email for analyst or admin roles.
+          </p>
+          <SocialLoginButtons />
+        </div>
+      )}
+    </AuthPageShell>
   );
 }

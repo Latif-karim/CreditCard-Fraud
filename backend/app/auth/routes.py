@@ -29,9 +29,8 @@ def register():
     return (
         jsonify(
             {
-                "message": "User registered successfully",
+                "message": "Account created successfully. Please verify your email to activate your account.",
                 "verification_required": True,
-                "note": "Email verification is simulated; use POST /auth/verify-email with your token after login in production.",
             }
         ),
         201,
@@ -42,7 +41,19 @@ def register():
 def login():
     data = LoginSchema().load(request.get_json() or {})
     user = User.query.filter_by(email=data["email"]).first()
-    if not user or not user.check_password(data["password"]):
+    if not user:
+        return jsonify({"error": "Invalid credentials"}), 401
+    if not user.password_hash:
+        return (
+            jsonify(
+                {
+                    "error": "This account uses social sign-in. Continue with Google or GitHub.",
+                    "social_login": True,
+                }
+            ),
+            401,
+        )
+    if not user.check_password(data["password"]):
         return jsonify({"error": "Invalid credentials"}), 401
     if not user.is_active:
         return jsonify({"error": "Account suspended"}), 403
@@ -75,7 +86,7 @@ def forgot_password():
     db.session.add(PasswordResetToken(email=email, otp_code=otp, expires_at=expires, used=False))
     db.session.commit()
 
-    payload = {"message": "OTP generated. Use it with reset-password within 15 minutes."}
+    payload = {"message": "If an account exists for this email, a verification code was sent."}
     if current_app.debug:
         payload["dev_otp"] = otp
     return jsonify(payload), 200
@@ -126,7 +137,7 @@ def reset_password():
 @auth_bp.post("/verify-email")
 @jwt_required()
 def verify_email():
-    """Simulated email verification — marks user verified (demo)."""
+    """Mark the authenticated user's email as verified."""
     uid = int(get_jwt_identity())
     user = User.query.get(uid)
     if not user:

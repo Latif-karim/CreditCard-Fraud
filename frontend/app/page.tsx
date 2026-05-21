@@ -76,7 +76,7 @@ export default function LandingPage() {
               <div className="rounded-xl border border-slate-200 bg-white/60 p-4 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-300">
                 <p className="font-semibold text-slate-900 dark:text-white">Explainable alert</p>
                 <p className="mt-2 leading-relaxed">
-                  “Velocity spike + foreign IP + amount 4× profile average → risk 87, SHAP-style drivers attached.”
+                  “Velocity spike + foreign IP + amount 4× profile average → risk 87, key drivers attached.”
                 </p>
               </div>
             </div>
@@ -91,8 +91,8 @@ export default function LandingPage() {
             <div className="mt-10 grid gap-6 md:grid-cols-3">
               <Step
                 icon={Activity}
-                title="Ingest & enrich"
-                body="Stream transactions with device, IP, merchant, and geo signals normalized to a risk schema."
+                title="Process & enrich"
+                body="Process transactions with device, IP, merchant, and geo signals normalized to a unified risk schema."
               />
               <Step
                 icon={Brain}
@@ -102,7 +102,7 @@ export default function LandingPage() {
               <Step
                 icon={LineChart}
                 title="Explain & act"
-                body="Analysts review SHAP-style drivers, triage alerts, freeze accounts, and export evidence packs."
+                body="Analysts review feature drivers, triage alerts, freeze accounts, and export evidence packs."
               />
             </div>
           </div>
@@ -120,7 +120,7 @@ export default function LandingPage() {
           </div>
         </section>
 
-        <section id="demo" className="bg-slate-900 py-16 text-white dark:bg-black/40">
+        <section id="product" className="bg-slate-900 py-16 text-white dark:bg-black/40">
           <div className="mx-auto grid max-w-6xl gap-10 px-6 lg:grid-cols-2 lg:items-center">
             <motion.div {...fade}>
               <h2 className="text-2xl font-semibold">Product walkthrough</h2>

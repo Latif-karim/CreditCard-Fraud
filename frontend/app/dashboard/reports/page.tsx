@@ -5,6 +5,7 @@ import { Download, FileJson, FileText, RefreshCw } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
 import { RoleGuard } from "@/components/role-guard";
+import { Skeleton } from "@/components/skeletons";
 import { fetchBlobWithAuth, fetchWithAuth, getStoredToken, postWithAuth } from "@/lib/api";
 
 function downloadBlob(blob: Blob, filename: string) {
@@ -133,8 +134,8 @@ export default function ReportsPage() {
         <div className="fintech-panel space-y-3 p-5">
           <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Exports</h3>
           <p className="text-soft text-xs leading-relaxed">
-            Reports auto-seed demo data when needed. Restart the Flask backend after pulling updates and run{" "}
-            <code className="text-[10px]">pip install fpdf2</code> for PDF support.
+            Download transaction exports and compliance summaries for your organization. PDF exports require server
+            configuration for document generation.
           </p>
           <button type="button" disabled={!!busy} onClick={() => void dlCsv()} className="btn-fintech-primary w-full disabled:opacity-60">
             <Download className="mr-2 inline h-4 w-4" />
@@ -157,15 +158,24 @@ export default function ReportsPage() {
           </button>
           <button type="button" disabled={!!busy} onClick={() => void seedData()} className="btn-fintech-secondary w-full disabled:opacity-60">
             <RefreshCw className="mr-2 inline h-4 w-4" />
-            Refresh demo dataset
+            Refresh sample data
           </button>
           {msg ? <p className="text-sm text-slate-600 dark:text-slate-300">{msg}</p> : null}
         </div>
         <div className="fintech-panel min-h-[240px] p-5">
           <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Preview</h3>
+          {busy === "preview" || busy === "seed" ? (
+            <div className="mt-3 space-y-2">
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-5/6" />
+              <Skeleton className="h-4 w-4/6" />
+              <Skeleton className="h-32 w-full" />
+            </div>
+          ) : (
           <pre className="text-soft mt-3 max-h-96 overflow-auto whitespace-pre-wrap rounded-xl bg-slate-100/80 p-3 text-xs dark:bg-slate-950/50">
             {summary || "Run a preview or download a report to see output here."}
           </pre>
+          )}
         </div>
       </div>
     </AppShell>

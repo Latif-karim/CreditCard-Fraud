@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { KeyRound, ShieldCheck, Smartphone } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
+import { ProfileSkeleton } from "@/components/skeletons";
 import { fetchWithAuth, patchWithAuth, postWithAuth } from "@/lib/api";
 
 type Me = { id: number; email: string; full_name: string | null; role: string; email_verified: boolean; two_factor_enabled: boolean };
@@ -13,25 +14,53 @@ export default function ProfilePage() {
   const [me, setMe] = useState<Me | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [name, setName] = useState("");
+  const [savedName, setSavedName] = useState("");
+  const [saving, setSaving] = useState(false);
   const [cur, setCur] = useState("");
   const [newPw, setNewPw] = useState("");
   const [msg, setMsg] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  const profileDirty = name.trim() !== savedName.trim();
 
   useEffect(() => {
     const token = localStorage.getItem("access_token") || "";
-    fetchWithAuth<Me>("/users/me", token)
-      .then((m) => {
-        setMe(m);
-        setName(m.full_name || "");
+    setLoading(true);
+    Promise.all([
+      fetchWithAuth<Me>("/users/me", token).catch(() => null),
+      fetchWithAuth<Session[]>("/users/sessions", token).catch(() => [] as Session[]),
+    ])
+      .then(([m, s]) => {
+        if (m) {
+          setMe(m);
+          const loaded = m.full_name || "";
+          setName(loaded);
+          setSavedName(loaded);
+        } else {
+          setMe(null);
+        }
+        setSessions(s);
       })
-      .catch(() => setMe(null));
-    fetchWithAuth<Session[]>("/users/sessions", token).then(setSessions).catch(() => setSessions([]));
+      .finally(() => setLoading(false));
   }, []);
 
   const saveProfile = async () => {
+    if (!profileDirty || saving) return;
     const token = localStorage.getItem("access_token") || "";
-    await patchWithAuth("/users/me", { full_name: name }, token).catch(() => {});
-    setMsg("Profile saved");
+    setSaving(true);
+    setMsg("");
+    try {
+      await patchWithAuth("/users/me", { full_name: name.trim() }, token);
+      const trimmed = name.trim();
+      setSavedName(trimmed);
+      setName(trimmed);
+      setMe((m) => (m ? { ...m, full_name: trimmed || null } : m));
+      setMsg("Profile saved");
+    } catch (e) {
+      setMsg((e as Error).message);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const changePw = async () => {
@@ -50,11 +79,15 @@ export default function ProfilePage() {
     const token = localStorage.getItem("access_token") || "";
     const res = await postWithAuth<{ two_factor_enabled: boolean }>("/users/toggle-2fa", {}, token);
     setMe((m) => (m ? { ...m, two_factor_enabled: res.two_factor_enabled } : m));
-    setMsg("2FA toggled (demo)");
+    setMsg("Two-factor authentication updated.");
   };
 
   return (
     <AppShell title="Profile & security" subtitle="Account hardening">
+      {loading ? (
+        <ProfileSkeleton />
+      ) : (
+      <>
       <div className="grid gap-4 lg:grid-cols-2">
         <div className="glass-card space-y-3 p-4">
           <h3 className="flex items-center gap-2 text-sm font-semibold">
@@ -70,15 +103,23 @@ export default function ProfilePage() {
           <input
             className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
             value={name}
-            onChange={(e) => setName(e.target.value)}
+            onChange={(e) => {
+              setName(e.target.value);
+              if (msg === "Profile saved") setMsg("");
+            }}
           />
-          <button
-            type="button"
-            onClick={() => void saveProfile()}
-            className="rounded-lg bg-slate-900 px-4 py-2 text-sm text-white dark:bg-white dark:text-slate-900"
-          >
-            Save profile
-          </button>
+          {profileDirty ? (
+            <button
+              type="button"
+              disabled={saving}
+              onClick={() => void saveProfile()}
+              className="rounded-lg bg-slate-900 px-4 py-2 text-sm text-white disabled:opacity-60 dark:bg-white dark:text-slate-900"
+            >
+              {saving ? "Saving…" : "Save profile"}
+            </button>
+          ) : (
+            <p className="text-sm text-emerald-600 dark:text-emerald-400">Profile up to date</p>
+          )}
         </div>
 
         <div className="glass-card space-y-3 p-4">
@@ -108,7 +149,7 @@ export default function ProfilePage() {
             Update password
           </button>
           <button type="button" onClick={() => void toggle2fa()} className="ml-2 text-sm text-sky-700 underline dark:text-sky-400">
-            Toggle 2FA (demo)
+            Toggle two-factor authentication
           </button>
         </div>
 
@@ -131,6 +172,8 @@ export default function ProfilePage() {
         </div>
       </div>
       {msg ? <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">{msg}</p> : null}
+      </>
+      )}
     </AppShell>
   );
 }

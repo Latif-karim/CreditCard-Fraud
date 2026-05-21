@@ -27,11 +27,7 @@ export function RoleGuard({ allow, children, title = "Access restricted" }: Role
   }, [role, pathname, router]);
 
   if (!role) {
-    return (
-      <AppShell title={title} subtitle="Loading">
-        <p className="text-sm text-slate-500">Loading permissions…</p>
-      </AppShell>
-    );
+    return <>{children}</>;
   }
 
   if (!allow.includes(role)) {

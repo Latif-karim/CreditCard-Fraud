@@ -128,7 +128,7 @@ def summary_pdf():
     try:
         from fpdf import FPDF
     except ImportError:
-        return jsonify({"error": "PDF library not installed. Run: pip install fpdf2"}), 503
+        return jsonify({"error": "PDF export is temporarily unavailable. Contact your administrator."}), 503
 
     from sqlalchemy import func
 
@@ -170,7 +170,7 @@ def summary_pdf():
     pdf.multi_cell(
         0,
         5,
-        "Demo report from FraudShield. Connect your card processor to POST /transactions/ingest in production.",
+        "Confidential — FraudShield fraud summary report. For authorized use only.",
     )
 
     raw = pdf.output()

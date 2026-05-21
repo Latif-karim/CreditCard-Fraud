@@ -35,6 +35,17 @@ Create an **admin** by registering any account then updating `user.role` to `adm
 | POST | `/auth/reset-password` | `{ email, otp, new_password }` |
 | POST | `/auth/verify-email` | JWT — marks `email_verified` (demo) |
 | GET | `/auth/me` | JWT — profile |
+| GET | `/auth/google`, `/auth/github` | OAuth redirect (requires `.env` client IDs) |
+| GET | `/auth/oauth/providers` | Which social providers are configured |
+
+### Google / GitHub sign-in troubleshooting (Windows)
+
+OAuth uses **plain `requests`** (no Authlib). Set in `backend/.env`:
+
+- `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` — redirect URI `http://127.0.0.1:5000/auth/google/callback`
+- `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` — callback `http://127.0.0.1:5000/auth/github/callback`
+- **`OAUTH_SSL_VERIFY=false`** if you see `CERTIFICATE_VERIFY_FAILED` (local dev only; then restart Flask)
+- **`getaddrinfo failed`:** check internet/DNS/VPN
 
 ## Transactions
 
@@ -44,6 +55,8 @@ Create an **admin** by registering any account then updating `user.role` to `adm
 | GET | `/transactions/flagged` | JWT |
 | GET | `/transactions/list` | JWT; query: `page`, `per_page`, `q`, `status`, `risk_min`, `risk_max`, `country`, `merchant`, `date_from`, `date_to`, `sort` |
 | PATCH | `/transactions/<id>/action` | `{ action: flag \| approve \| safe \| freeze_account }` |
+| DELETE | `/admin/transactions/<id>` | Admin only — remove one transaction and related records |
+| GET | `/admin/transactions` | Admin only — paginated transaction list for maintenance UI |
 
 ## Dashboard (JWT; `user` / `analyst` / `admin` for reads)
 
@@ -67,9 +80,11 @@ Create an **admin** by registering any account then updating `user.role` to `adm
 
 ## Admin (JWT **admin**)
 
-- `GET /admin/users`, `PATCH /admin/users/<id>`  
-- `PATCH /admin/rules/<id>` — toggle `FraudRule.enabled`  
-- `POST /admin/models/retrain` — stub audit event  
+- `GET /admin/users`, `PATCH /admin/users/<id>`, `DELETE /admin/users/<id>` — remove user and their data
+- `GET /admin/system/stats` — record counts for maintenance UI
+- `POST /admin/data/purge-transactions` — body `{ "confirm": "DELETE_ALL_TRANSACTIONS" }` wipes all transaction-related data
+- `PATCH /admin/rules/<id>` — toggle `FraudRule.enabled`
+- `POST /admin/models/retrain` — stub audit event
 
 ## Reports
 

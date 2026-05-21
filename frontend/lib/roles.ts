@@ -8,7 +8,7 @@ export const ROLE_LABELS: Record<AppRole, string> = {
 
 export const ROLE_DESCRIPTIONS: Record<AppRole, string> = {
   user: "View your own transactions, submit payments, and receive risk alerts.",
-  analyst: "Monitor queues, investigate fraud, run simulations, and export reports.",
+  analyst: "Monitor queues, investigate fraud, analyze risk, and export reports.",
   admin: "Full platform control: users, rules, model ops, and global analytics.",
 };
 
@@ -21,9 +21,9 @@ export type NavItem = {
 export const WORKSPACE_NAV: NavItem[] = [
   { href: "/dashboard", label: "Overview", roles: ["user", "analyst", "admin"] },
   { href: "/dashboard/monitoring", label: "Monitoring", roles: ["analyst", "admin"] },
-  { href: "/dashboard/capture", label: "Capture", roles: ["user", "analyst", "admin"] },
+  { href: "/dashboard/capture", label: "Transactions", roles: ["user", "analyst", "admin"] },
   { href: "/dashboard/transactions", label: "Flagged queue", roles: ["analyst", "admin"] },
-  { href: "/dashboard/fraud", label: "Fraud lab", roles: ["analyst", "admin"] },
+  { href: "/dashboard/fraud", label: "Risk analysis", roles: ["analyst", "admin"] },
   { href: "/dashboard/explain", label: "Explainability", roles: ["user", "analyst", "admin"] },
   { href: "/dashboard/analytics", label: "Analytics", roles: ["analyst", "admin"] },
   { href: "/dashboard/alerts", label: "Alerts", roles: ["analyst", "admin"] },

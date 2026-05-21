@@ -5,6 +5,7 @@ import { FlaskConical } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
 import { RoleGuard } from "@/components/role-guard";
+import { ChartAreaSkeleton, Skeleton } from "@/components/skeletons";
 import { HorizontalFeatureChart } from "@/components/charts/horizontal-feature-chart";
 import { ScrollReveal } from "@/components/scroll-reveal";
 import { postWithAuth } from "@/lib/api";
@@ -16,9 +17,11 @@ export default function FraudLabPage() {
   const [location, setLocation] = useState("London");
   const [result, setResult] = useState<FraudSimulateResponse | null>(null);
   const [err, setErr] = useState("");
+  const [running, setRunning] = useState(false);
 
   const run = async () => {
     setErr("");
+    setRunning(true);
     const token = localStorage.getItem("access_token") || "";
     try {
       const res = await postWithAuth<FraudSimulateResponse>(
@@ -34,12 +37,14 @@ export default function FraudLabPage() {
       setResult(res);
     } catch (e) {
       setErr((e as Error).message);
+    } finally {
+      setRunning(false);
     }
   };
 
   return (
-    <RoleGuard allow={["analyst", "admin"]} title="Fraud lab">
-    <AppShell title="Fraud detection lab" subtitle="Manual simulation & scoring">
+    <RoleGuard allow={["analyst", "admin"]} title="Risk analysis">
+    <AppShell title="Fraud detection lab" subtitle="Test transactions and review scoring">
       <div className="grid gap-4 lg:grid-cols-[320px_1fr]">
         <div className="glass-card space-y-3 p-4">
           <div className="flex items-center gap-2 text-sm font-semibold">
@@ -75,7 +80,16 @@ export default function FraudLabPage() {
         </div>
 
         <div className="space-y-4">
-          {result ? (
+          {running ? (
+            <div className="space-y-4">
+              <div className="glass-card grid gap-3 p-4 sm:grid-cols-3">
+                <Skeleton className="h-12 w-full" />
+                <Skeleton className="h-12 w-full" />
+                <Skeleton className="h-12 w-full" />
+              </div>
+              <ChartAreaSkeleton className="min-h-[260px]" />
+            </div>
+          ) : result ? (
             <>
               <div className="glass-card grid gap-3 p-4 sm:grid-cols-3">
                 <div>
@@ -102,15 +116,15 @@ export default function FraudLabPage() {
               </div>
               <ScrollReveal placeholderClassName="min-h-[260px]">
                 <HorizontalFeatureChart
-                  title="Feature influence (approximate)"
+                  title="Feature influence"
                   rows={result.feature_importance.map((f) => ({ feature: f.feature, contribution: f.contribution }))}
                 />
               </ScrollReveal>
             </>
           ) : (
             <div className="glass-card p-6 text-sm text-slate-600 dark:text-slate-300">
-              Configure a synthetic transaction and run the pipeline. Results include ML probability, fused risk score,
-              and an approximate feature attribution for academic explainability.
+              Enter transaction details and run the fraud detection pipeline. Results include risk score, decision
+              label, and key factors that influenced the outcome.
             </div>
           )}
         </div>

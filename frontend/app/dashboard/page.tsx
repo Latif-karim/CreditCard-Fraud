@@ -1,6 +1,8 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
   Activity,
@@ -8,6 +10,7 @@ import {
   ArrowLeftRight,
   Bell,
   CheckCircle2,
+  ChevronRight,
   Clock,
   CreditCard,
   Percent,
@@ -21,15 +24,27 @@ import type { LucideIcon } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
 import { RoleBanner } from "@/components/role-banner";
+import { fraudQueueHref, transactionDetailHref } from "@/lib/transaction-links";
+import { useHydrated } from "@/lib/use-hydrated";
 import { useUserRole } from "@/lib/use-user-role";
+
+import {
+  ChartAreaSkeleton,
+  KpiGridSkeleton,
+  ListSkeleton,
+  MetricPillsSkeleton,
+  Skeleton,
+  TableSkeleton,
+} from "@/components/skeletons";
+import { formatAuditAction, formatAuditDetails } from "@/lib/format-audit";
 
 const FraudLineChart = dynamic(
   () => import("@/components/charts/fraud-line-chart").then((m) => m.FraudLineChart),
-  { ssr: false, loading: () => <ChartSkeleton /> }
+  { ssr: false, loading: () => <ChartAreaSkeleton /> }
 );
 const SimpleBarChart = dynamic(
   () => import("@/components/charts/bar-chart").then((m) => m.SimpleBarChart),
-  { ssr: false, loading: () => <ChartSkeleton /> }
+  { ssr: false, loading: () => <ChartAreaSkeleton className="min-h-[260px]" /> }
 );
 import { KpiCard } from "@/components/kpi-card";
 import { RiskHeatmap } from "@/components/risk-heatmap";
@@ -55,8 +70,11 @@ type RecentTx = {
 };
 
 export default function DashboardPage() {
+  const router = useRouter();
+  const hydrated = useHydrated();
   const role = useUserRole();
-  const isStaff = role === "analyst" || role === "admin";
+  const isStaff = hydrated && (role === "analyst" || role === "admin");
+  const queueHref = fraudQueueHref(role);
   const [overview, setOverview] = useState<DashboardOverview | null>(null);
   const [trends, setTrends] = useState<TrendResponse | null>(null);
   const [flagged, setFlagged] = useState<FlaggedTransaction[]>([]);
@@ -67,10 +85,12 @@ export default function DashboardPage() {
   const [recent, setRecent] = useState<RecentTx[]>([]);
   const [live, setLive] = useState<LiveActivityItem[]>([]);
   const [modelMetrics, setModelMetrics] = useState<Record<string, unknown> | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const token = localStorage.getItem("access_token") || "";
     const load = async () => {
+      setLoading(true);
       try {
         setOverview(await fetchWithAuth<DashboardOverview>("/dashboard/overview", token));
       } catch {
@@ -124,6 +144,8 @@ export default function DashboardPage() {
         setModelMetrics(await fetchWithAuth<Record<string, unknown>>("/dashboard/model-metrics", token));
       } catch {
         setModelMetrics(null);
+      } finally {
+        setLoading(false);
       }
     };
     void load();
@@ -208,16 +230,41 @@ export default function DashboardPage() {
     live.length > 0
       ? live
       : [
-          { title: "Suspicious transaction detected", detail: "Velocity threshold exceeded", time: "demo" },
-          { title: "User login from new device", detail: "New fingerprint + ASN", time: "demo" },
+          { title: "Suspicious transaction detected", detail: "Velocity threshold exceeded", time: "2 min ago" },
+          { title: "User login from new device", detail: "New fingerprint + ASN", time: "8 min ago" },
         ];
 
   const subtitle =
-    role === "user"
-      ? "Your card activity"
-      : role === "analyst"
-        ? "Analyst command center"
-        : "Command center";
+    !hydrated || !role
+      ? "Command center"
+      : role === "user"
+        ? "Your card activity"
+        : role === "analyst"
+          ? "Analyst command center"
+          : "Command center";
+
+  if (loading) {
+    return (
+      <AppShell title="Operations dashboard" subtitle={subtitle}>
+        <div className="space-y-5">
+          <RoleBanner />
+          <Skeleton className="h-8 w-48 rounded-full" />
+          <KpiGridSkeleton />
+          <MetricPillsSkeleton />
+          <ChartAreaSkeleton className="min-h-[300px]" />
+          <div className="grid gap-4 lg:grid-cols-2">
+            <ChartAreaSkeleton className="min-h-[260px]" />
+            <ChartAreaSkeleton className="min-h-[260px]" />
+          </div>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <TableSkeleton rows={4} cols={4} />
+            <ListSkeleton items={4} />
+          </div>
+          {isStaff ? <TableSkeleton rows={4} cols={3} /> : null}
+        </div>
+      </AppShell>
+    );
+  }
 
   return (
     <AppShell title="Operations dashboard" subtitle={subtitle}>
@@ -252,7 +299,8 @@ export default function DashboardPage() {
             title="Fraud detected"
             value={Number(view.flagged_transactions).toLocaleString()}
             tone="danger"
-            subtitle="Open investigations"
+            subtitle="View flagged transactions"
+            href={queueHref}
           />
           <KpiCard
             icon={Percent}
@@ -286,7 +334,13 @@ export default function DashboardPage() {
 
         <div className="grid gap-4 md:grid-cols-4">
           <MetricPill icon={Wallet} label="Volume (24h)" value={`$${Math.round(view.total_volume).toLocaleString()}`} tone="cyan" />
-          <MetricPill icon={AlertTriangle} label="High-risk queue" value={String(view.flagged_transactions)} tone="red" />
+          <MetricPill
+            icon={AlertTriangle}
+            label="High-risk queue"
+            value={String(view.flagged_transactions)}
+            tone="red"
+            href={queueHref}
+          />
           <MetricPill icon={CheckCircle2} label="Auto-approved" value={String(view.approved_transactions)} tone="emerald" />
           <MetricPill icon={Clock} label="Decision latency" value="32 ms" tone="violet" />
         </div>
@@ -309,9 +363,9 @@ export default function DashboardPage() {
         </ScrollReveal>
 
         <div className="grid gap-4 lg:grid-cols-2">
-          <div className="glass-card p-4">
+          <div className="glass-card flex max-h-[min(22rem,40vh)] flex-col p-4">
             <PanelTitle icon={Radio} title="Live activity" />
-            <ul className="space-y-3 text-sm">
+            <ul className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain pr-1 text-sm">
               {liveView.map((item, idx) => (
                 <li
                   key={`${item.title}-${idx}`}
@@ -329,13 +383,15 @@ export default function DashboardPage() {
               ))}
             </ul>
           </div>
-          <div className="glass-card p-4">
+          <div id="alert-feed" className="glass-card flex max-h-[min(22rem,40vh)] scroll-mt-4 flex-col p-4">
             <PanelTitle icon={Bell} title="Alert feed" />
-            <div className="space-y-2">
+            <p className="text-soft -mt-2 mb-3 shrink-0 text-xs">Click a transaction to view details and explanation.</p>
+            <div className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain pr-1">
               {flaggedView.map((tx) => (
-                <div
+                <Link
                   key={tx.id}
-                  className="flex items-center justify-between gap-3 rounded-xl border border-red-200/60 bg-gradient-to-r from-red-50/80 to-white/60 px-3 py-2.5 dark:border-red-500/20 dark:from-red-950/30 dark:to-slate-950/40"
+                  href={transactionDetailHref(tx.id)}
+                  className="group flex items-center justify-between gap-3 rounded-xl border border-red-200/60 bg-gradient-to-r from-red-50/80 to-white/60 px-3 py-2.5 transition hover:border-red-300 hover:shadow-md dark:border-red-500/20 dark:from-red-950/30 dark:to-slate-950/40 dark:hover:border-red-500/40"
                 >
                   <div className="flex min-w-0 items-center gap-3">
                     <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-red-500/15 text-red-600 dark:text-red-300">
@@ -350,17 +406,21 @@ export default function DashboardPage() {
                       </p>
                     </div>
                   </div>
-                  <span className="shrink-0 rounded-lg bg-red-500/15 px-2 py-1 text-sm font-bold text-red-600 dark:text-red-300">
-                    {tx.risk_score.toFixed(1)}
-                  </span>
-                </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <span className="rounded-lg bg-red-500/15 px-2 py-1 text-sm font-bold text-red-600 dark:text-red-300">
+                      {tx.risk_score.toFixed(1)}
+                    </span>
+                    <ChevronRight className="h-4 w-4 text-red-400 opacity-60 transition group-hover:translate-x-0.5 group-hover:opacity-100" />
+                  </div>
+                </Link>
               ))}
             </div>
           </div>
         </div>
 
-        <div className="glass-card p-4">
+        <div id="recent-transactions" className="glass-card scroll-mt-4 p-4">
           <PanelTitle icon={ArrowLeftRight} title="Recent transactions" />
+          <p className="text-soft -mt-2 mb-3 text-xs">Click a row to open transaction explainability.</p>
           <div className="w-full overflow-x-auto">
             <table className="w-full min-w-[640px] border-collapse text-sm">
               <thead>
@@ -370,16 +430,32 @@ export default function DashboardPage() {
                   <th className="pb-2 text-left">Location</th>
                   <th className="pb-2 text-left">Status</th>
                   <th className="pb-2 text-left">Confidence</th>
+                  <th className="pb-2 w-8" aria-hidden />
                 </tr>
               </thead>
               <tbody>
                 {recentView.map((tx) => (
-                  <tr key={tx.id} className="border-b border-slate-100 last:border-0 dark:border-slate-800">
-                    <td className="py-2">{tx.id}</td>
+                  <tr
+                    key={tx.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => router.push(transactionDetailHref(tx.id))}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        router.push(transactionDetailHref(tx.id));
+                      }
+                    }}
+                    className="cursor-pointer border-b border-slate-100 transition hover:bg-slate-50/80 last:border-0 dark:border-slate-800 dark:hover:bg-slate-800/50"
+                  >
+                    <td className="py-2 font-medium text-slate-900 dark:text-white">#{tx.id}</td>
                     <td className="py-2">${tx.amount.toFixed(2)}</td>
                     <td className="py-2">{tx.location}</td>
                     <td className="py-2 capitalize">{tx.status}</td>
                     <td className="py-2">{(tx.confidence * 100).toFixed(1)}%</td>
+                    <td className="py-2 text-slate-400">
+                      <ChevronRight className="h-4 w-4" />
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -421,11 +497,11 @@ export default function DashboardPage() {
                 <tbody>
                   {logsView.map((row) => (
                     <tr key={row.id} className="border-b border-slate-100 last:border-0 dark:border-slate-800">
-                      <td className="py-2">{row.action}</td>
+                      <td className="py-2">{formatAuditAction(row.action)}</td>
                       <td className="py-2">
                         {row.entity} #{row.entity_id}
                       </td>
-                      <td className="text-soft max-w-xs truncate py-2">{row.details}</td>
+                      <td className="text-soft max-w-xs truncate py-2">{formatAuditDetails(row.details)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -474,20 +550,18 @@ function HealthRow({
   );
 }
 
-function ChartSkeleton() {
-  return <div className="glass-card min-h-[220px] animate-pulse bg-slate-100/50 dark:bg-slate-800/30" />;
-}
-
 function MetricPill({
   icon: Icon,
   label,
   value,
   tone = "cyan",
+  href,
 }: {
   icon: LucideIcon;
   label: string;
   value: string;
   tone?: "cyan" | "red" | "emerald" | "violet";
+  href?: string;
 }) {
   const tones = {
     cyan: {
@@ -513,9 +587,9 @@ function MetricPill({
   };
   const t = tones[tone];
 
-  return (
+  const body = (
     <div
-      className={`fintech-panel border bg-gradient-to-br px-4 py-3 transition hover:-translate-y-0.5 hover:shadow-lg ${t.border} ${t.bg}`}
+      className={`fintech-panel border bg-gradient-to-br px-4 py-3 transition hover:-translate-y-0.5 hover:shadow-lg ${t.border} ${t.bg} ${href ? "cursor-pointer" : ""}`}
     >
       <div className="flex items-center gap-2.5">
         <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${t.icon}`}>
@@ -525,5 +599,19 @@ function MetricPill({
       </div>
       <p className="mt-2 pl-[2.625rem] text-lg font-bold tracking-tight text-slate-900 dark:text-white">{value}</p>
     </div>
+  );
+
+  if (!href) return body;
+  if (href.startsWith("#")) {
+    return (
+      <a href={href} className="block rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50">
+        {body}
+      </a>
+    );
+  }
+  return (
+    <Link href={href} className="block rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50">
+      {body}
+    </Link>
   );
 }
