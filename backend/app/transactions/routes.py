@@ -1,24 +1,41 @@
 from datetime import datetime, timedelta
 
 from flask import Blueprint, current_app, jsonify, request
-from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
+from flask_jwt_extended import get_jwt_identity, jwt_required
 from marshmallow import ValidationError
 from sqlalchemy import or_
 
 from ..extensions import db
-from ..models import FraudDecision, FraudNotification, Transaction, User
+from ..models import DisputeCase, FraudDecision, FraudNotification, Transaction, User
 from ..schemas import TransactionIngestSchema
 from ..services.audit import log_action
 from ..services.seed_data import seed_all, seed_transactions_if_needed
 from ..services.simulator import simulator_status, start_simulator, stop_simulator, tick_once
-from ..services.rbac import can_manage_transaction, is_staff, scope_transactions
+from ..services.rbac import actor_user_id, can_manage_transaction, current_role, is_staff, scope_transactions
 from ..services.transaction_ingest import ingest_transaction_data
 
 transactions_bp = Blueprint("transactions", __name__, url_prefix="/transactions")
 
 
 def _role():
-    return get_jwt().get("role")
+    return current_role()
+
+
+def _customer_status(tx: Transaction) -> str:
+    status = (tx.status or "").lower()
+    if status in ("declined", "blocked", "frozen"):
+        return "Blocked"
+    if status in ("flagged", "disputed", "pending"):
+        return "Under Review"
+    return "Safe"
+
+
+def _risk_level(score: float) -> str:
+    if score >= 80:
+        return "High Risk"
+    if score >= 60:
+        return "Medium Risk"
+    return "Low Risk"
 
 
 @transactions_bp.post("/ingest")
@@ -50,6 +67,23 @@ def ingest_transaction():
     except Exception as exc:
         db.session.rollback()
         return jsonify({"error": str(exc)}), 500
+    if role == "user":
+        tx = Transaction.query.get(result["transaction_id"])
+        return (
+            jsonify(
+                {
+                    "transaction_id": result["transaction_id"],
+                    "status": result["status"],
+                    "customer_status": _customer_status(tx) if tx else result["status"],
+                    "message": (
+                        "Transaction requires verification."
+                        if result["status"] == "flagged"
+                        else "Transaction processed."
+                    ),
+                }
+            ),
+            201,
+        )
     return jsonify(result), 201
 
 
@@ -231,6 +265,9 @@ def list_transactions():
 @transactions_bp.patch("/<int:transaction_id>/action")
 @jwt_required()
 def transaction_action(transaction_id: int):
+    if not is_staff():
+        return jsonify({"error": "Use dispute or review request actions for customer accounts"}), 403
+
     data = request.get_json() or {}
     action = (data.get("action") or "").lower()
     tx = Transaction.query.get(transaction_id)
@@ -266,9 +303,78 @@ def transaction_action(transaction_id: int):
     return jsonify({"message": "ok", "status": tx.status}), 200
 
 
+@transactions_bp.post("/<int:transaction_id>/dispute")
+@jwt_required()
+def dispute_transaction(transaction_id: int):
+    tx = Transaction.query.get(transaction_id)
+    if not tx:
+        return jsonify({"error": "Not found"}), 404
+    if not can_manage_transaction(tx):
+        return jsonify({"error": "Forbidden"}), 403
+
+    data = request.get_json() or {}
+    reason = (data.get("reason") or "request_review").strip().lower()
+    if reason not in ("report_transaction", "not_mine", "request_review"):
+        return jsonify({"error": "Invalid dispute reason"}), 400
+
+    existing = DisputeCase.query.filter_by(transaction_id=tx.id).first()
+    if existing:
+        return (
+            jsonify(
+                {
+                    "message": "Review request already exists",
+                    "case_id": existing.id,
+                    "status": existing.status,
+                    "transaction_status": tx.status,
+                }
+            ),
+            200,
+        )
+
+    case = DisputeCase(
+        transaction_id=tx.id,
+        user_id=tx.user_id,
+        reason=reason,
+        customer_note=(data.get("note") or "").strip()[:1000],
+        status="open",
+    )
+    tx.status = "disputed"
+    db.session.add(case)
+    db.session.add(
+        FraudNotification(
+            title="Review request submitted",
+            body=f"Transaction #{tx.id} has been sent to the fraud team for review.",
+            severity="medium",
+            category="transaction_review",
+            user_id=tx.user_id,
+            transaction_id=tx.id,
+        )
+    )
+    log_action(
+        actor_user_id=actor_user_id(),
+        action="transaction_disputed",
+        entity="transaction",
+        entity_id=str(tx.id),
+        details={"reason": reason},
+    )
+    db.session.commit()
+    return (
+        jsonify(
+            {
+                "message": "Review request submitted",
+                "case_id": case.id,
+                "status": case.status,
+                "transaction_status": tx.status,
+            }
+        ),
+        201,
+    )
+
+
 def _tx_dict(tx: Transaction) -> dict:
     dec = FraudDecision.query.filter_by(transaction_id=tx.id).first()
-    return {
+    include_internal = is_staff()
+    payload = {
         "id": tx.id,
         "user_id": tx.user_id,
         "amount": tx.amount,
@@ -278,10 +384,20 @@ def _tx_dict(tx: Transaction) -> dict:
         "merchant_category": tx.merchant_category,
         "card_last4": tx.card_last4,
         "card_type": tx.card_type,
-        "ip_address": tx.ip_address,
-        "device_id": tx.device_id,
         "status": tx.status,
-        "risk_score": tx.risk_score,
-        "confidence": tx.confidence or (dec.ml_probability if dec else 0.0),
         "created_at": tx.created_at.isoformat(),
+        "customer_status": _customer_status(tx),
+        "risk_level": _risk_level(tx.risk_score),
     }
+    if include_internal:
+        payload.update(
+            {
+                "ip_address": tx.ip_address,
+                "device_id": tx.device_id,
+                "risk_score": tx.risk_score,
+                "confidence": tx.confidence or (dec.ml_probability if dec else 0.0),
+            }
+        )
+    else:
+        payload.update({"ip_address": None, "device_id": None, "risk_score": 0.0, "confidence": 0.0})
+    return payload

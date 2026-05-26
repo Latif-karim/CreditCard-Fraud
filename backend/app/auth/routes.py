@@ -11,6 +11,15 @@ from ..schemas import LoginSchema, RegisterSchema
 auth_bp = Blueprint("auth", __name__, url_prefix="/auth")
 
 _ALLOWED_REGISTER_ROLES = frozenset({"user", "analyst", "admin"})
+_APPROVAL_REQUIRED_ROLES = frozenset({"analyst", "admin"})
+
+
+def _requires_approval(user: User) -> bool:
+    return user.role in _APPROVAL_REQUIRED_ROLES and not user.approved
+
+
+def _effective_role(user: User) -> str:
+    return "user" if _requires_approval(user) else user.role
 
 
 @auth_bp.post("/register")
@@ -22,14 +31,26 @@ def register():
     if User.query.filter_by(email=data["email"]).first():
         return jsonify({"error": "Email already exists"}), 400
 
-    user = User(email=data["email"], role=role, full_name=data.get("full_name"), email_verified=False)
+    user = User(
+        email=data["email"],
+        role=role,
+        full_name=data.get("full_name"),
+        email_verified=False,
+        approved=role not in _APPROVAL_REQUIRED_ROLES,
+    )
     user.set_password(data["password"])
     db.session.add(user)
     db.session.commit()
+    awaiting_approval = _requires_approval(user)
     return (
         jsonify(
             {
-                "message": "Account created successfully. Please verify your email to activate your account.",
+                "message": (
+                    "Access request submitted. You can use the cardholder workspace while an administrator reviews your request."
+                    if awaiting_approval
+                    else "Account created successfully. Please verify your email to activate your account."
+                ),
+                "awaiting_approval": awaiting_approval,
                 "verification_required": True,
             }
         ),
@@ -58,15 +79,18 @@ def login():
     if not user.is_active:
         return jsonify({"error": "Account suspended"}), 403
 
-    token = create_access_token(identity=str(user.id), additional_claims={"role": user.role})
-    
+    effective_role = _effective_role(user)
+    token = create_access_token(identity=str(user.id), additional_claims={"role": effective_role})
+
     return (
         jsonify(
             {
                 "access_token": token,
-                "role": user.role,
+                "role": effective_role,
+                "requested_role": user.role if _requires_approval(user) else None,
                 "user_id": user.id,
                 "email_verified": user.email_verified,
+                "approved": user.approved,
             }
         ),
         200,
@@ -154,14 +178,17 @@ def me():
     user = User.query.get(uid)
     if not user:
         return jsonify({"error": "Not found"}), 404
+    effective_role = _effective_role(user)
     return (
         jsonify(
             {
                 "id": user.id,
                 "email": user.email,
-                "role": user.role,
+                "role": effective_role,
+                "requested_role": user.role if _requires_approval(user) else None,
                 "full_name": user.full_name,
                 "email_verified": user.email_verified,
+                "approved": user.approved,
                 "two_factor_enabled": user.two_factor_enabled,
             }
         ),

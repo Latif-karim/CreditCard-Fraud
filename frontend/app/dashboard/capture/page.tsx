@@ -20,11 +20,13 @@ type SimulatorStatus = {
 
 type IngestResult = {
   transaction_id: number;
-  risk_score: number;
-  label: string;
+  risk_score?: number;
+  label?: string;
   status: string;
-  confidence: number;
-  reasons: string[];
+  confidence?: number;
+  reasons?: string[];
+  customer_status?: string;
+  message?: string;
   amount?: number;
   location?: string;
 };
@@ -132,10 +134,14 @@ export default function CapturePage() {
         merchant,
         country,
         status: res.status,
-        risk_score: res.risk_score,
-        confidence: res.confidence,
+        risk_score: res.risk_score ?? 0,
+        confidence: res.confidence ?? 0,
       });
-      setMsg(`Transaction #${res.transaction_id} · risk ${res.risk_score.toFixed(1)} · ${res.status}`);
+      setMsg(
+        role === "user"
+          ? `Transaction #${res.transaction_id} · ${res.customer_status || res.status}`
+          : `Transaction #${res.transaction_id} · risk ${(res.risk_score ?? 0).toFixed(1)} · ${res.status}`
+      );
     } catch (err) {
       setMsg((err as Error).message);
     } finally {
@@ -191,10 +197,10 @@ export default function CapturePage() {
         amount: res.amount ?? Number(amount),
         location: res.location ?? location,
         status: res.status,
-        risk_score: res.risk_score,
-        confidence: res.confidence,
+        risk_score: res.risk_score ?? 0,
+        confidence: res.confidence ?? 0,
       });
-      setMsg(`Transaction #${res.transaction_id} processed · risk ${res.risk_score.toFixed(1)}`);
+      setMsg(`Transaction #${res.transaction_id} processed · risk ${(res.risk_score ?? 0).toFixed(1)}`);
       await refreshSim();
     } catch (err) {
       setMsg((err as Error).message);
@@ -333,14 +339,27 @@ export default function CapturePage() {
           {msg ? <p className="text-sm text-slate-600 dark:text-slate-300">{msg}</p> : null}
           {lastResult ? (
             <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-3 text-sm dark:border-cyan-400/20">
-              <p className="font-medium text-slate-900 dark:text-white">
-                TX #{lastResult.transaction_id} · {lastResult.label} · score {lastResult.risk_score.toFixed(1)}
-              </p>
-              <ul className="text-soft mt-2 list-disc pl-5 text-xs">
-                {(lastResult.reasons || []).slice(0, 4).map((r, i) => (
-                  <li key={i}>{r}</li>
-                ))}
-              </ul>
+              {role === "user" ? (
+                <>
+                  <p className="font-medium text-slate-900 dark:text-white">
+                    TX #{lastResult.transaction_id} · {lastResult.customer_status || lastResult.status}
+                  </p>
+                  <p className="text-soft mt-2 text-xs">
+                    {lastResult.message || "Transaction submitted for account monitoring."}
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="font-medium text-slate-900 dark:text-white">
+                    TX #{lastResult.transaction_id} · {lastResult.label} · score {(lastResult.risk_score ?? 0).toFixed(1)}
+                  </p>
+                  <ul className="text-soft mt-2 list-disc pl-5 text-xs">
+                    {(lastResult.reasons || []).slice(0, 4).map((r, i) => (
+                      <li key={i}>{r}</li>
+                    ))}
+                  </ul>
+                </>
+              )}
             </div>
           ) : null}
         </form>

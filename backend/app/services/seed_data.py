@@ -26,6 +26,7 @@ def ensure_demo_users() -> list[int]:
                 full_name=name,
                 email_verified=True,
                 is_active=True,
+                approved=True,
             )
             user.set_password("DemoPass123!")
             db.session.add(user)
@@ -35,6 +36,7 @@ def ensure_demo_users() -> list[int]:
             user.full_name = name or user.full_name
             user.email_verified = True
             user.is_active = True
+            user.approved = True
         ids.append(user.id)
 
     # Any other registered users

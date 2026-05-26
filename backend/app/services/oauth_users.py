@@ -47,6 +47,7 @@ def get_or_create_oauth_user(
         full_name=full_name,
         email_verified=True,
         is_active=True,
+        approved=True,
         auth_provider=provider,
         oauth_subject=subject,
         password_hash=None,

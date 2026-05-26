@@ -10,14 +10,13 @@ from ..services.admin_maintenance import (
     purge_all_transaction_data,
 )
 from ..services.audit import log_action
+from ..services.rbac import is_admin
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
 
 
 def _admin():
-    from flask_jwt_extended import get_jwt
-
-    return get_jwt().get("role") == "admin"
+    return is_admin()
 
 
 @admin_bp.get("/users")
@@ -35,7 +34,9 @@ def list_users():
                     "role": u.role,
                     "full_name": u.full_name,
                     "is_active": u.is_active,
+                    "approved": u.approved,
                     "email_verified": u.email_verified,
+                    "created_at": u.created_at.isoformat(),
                 }
                 for u in users
             ]
@@ -53,19 +54,81 @@ def update_user(user_id: int):
     user = User.query.get(user_id)
     if not user:
         return jsonify({"error": "Not found"}), 404
+    actor_id = int(get_jwt_identity())
+    if user.id == actor_id and data.get("approved") is False:
+        return jsonify({"error": "You cannot revoke your own approval"}), 400
     if "role" in data and data["role"] in ("admin", "analyst", "user"):
         user.role = data["role"]
+        user.approved = True
+    if "approved" in data:
+        user.approved = bool(data["approved"])
+    if user.role == "user":
+        user.approved = True
     if "is_active" in data:
         user.is_active = bool(data["is_active"])
     log_action(
-        int(get_jwt_identity()) if get_jwt_identity() else None,
+        actor_id,
         "admin_update_user",
         "user",
         str(user.id),
-        {"role": user.role, "is_active": user.is_active},
+        {"role": user.role, "is_active": user.is_active, "approved": user.approved},
     )
     db.session.commit()
     return jsonify({"message": "updated"}), 200
+
+
+@admin_bp.post("/users/<int:user_id>/approve")
+@jwt_required()
+def approve_user(user_id: int):
+    if not _admin():
+        return jsonify({"error": "Admin only"}), 403
+
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({"error": "Not found"}), 404
+    if user.role not in ("admin", "analyst"):
+        return jsonify({"error": "Only analyst or admin requests require approval"}), 400
+
+    user.approved = True
+    log_action(
+        int(get_jwt_identity()),
+        "admin_approve_access",
+        "user",
+        str(user.id),
+        {"email": user.email, "role": user.role},
+    )
+    db.session.commit()
+    return jsonify({"message": "Access approved", "id": user.id, "approved": user.approved}), 200
+
+
+@admin_bp.post("/users/<int:user_id>/reject")
+@jwt_required()
+def reject_user(user_id: int):
+    if not _admin():
+        return jsonify({"error": "Admin only"}), 403
+
+    actor_id = int(get_jwt_identity())
+    if user_id == actor_id:
+        return jsonify({"error": "You cannot reject your own account"}), 400
+
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({"error": "Not found"}), 404
+    if user.role not in ("admin", "analyst") or user.approved:
+        return jsonify({"error": "No pending elevated access request for this user"}), 400
+
+    requested_role = user.role
+    user.role = "user"
+    user.approved = True
+    log_action(
+        actor_id,
+        "admin_reject_access",
+        "user",
+        str(user.id),
+        {"email": user.email, "requested_role": requested_role},
+    )
+    db.session.commit()
+    return jsonify({"message": "Access request rejected", "id": user.id, "role": user.role}), 200
 
 
 @admin_bp.patch("/rules/<int:rule_id>")

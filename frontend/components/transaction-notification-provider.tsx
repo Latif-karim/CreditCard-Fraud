@@ -54,8 +54,8 @@ function showBrowserNotification(tx: TransactionRow) {
   if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
   const flagged = tx.status === "flagged" || tx.risk_score >= 60;
   try {
-    new Notification(flagged ? "High-risk transaction" : "New transaction", {
-      body: `TX #${tx.id} · $${tx.amount.toFixed(2)} · ${tx.merchant || tx.location} · risk ${tx.risk_score.toFixed(0)}`,
+    new Notification(flagged ? "Transaction requires verification" : "New transaction", {
+      body: `TX #${tx.id} · $${tx.amount.toFixed(2)} · ${tx.merchant || tx.location}`,
       tag: `tx-${tx.id}`,
     });
   } catch {
@@ -256,7 +256,7 @@ function TransactionToastStack({
           >
             <div className="flex items-start justify-between gap-2">
               <p className="text-xs font-semibold uppercase tracking-wide opacity-80">
-                {high ? "Risk alert" : "New transaction"}
+                {high ? "Verification required" : "New transaction"}
               </p>
               <button
                 type="button"
@@ -271,7 +271,7 @@ function TransactionToastStack({
               TX #{tx.id} · ${tx.amount.toFixed(2)}
             </p>
             <p className="mt-0.5 text-xs opacity-80">
-              {tx.merchant || "Merchant"} · {tx.location} · score {tx.risk_score.toFixed(0)}
+              {tx.merchant || "Merchant"} · {tx.location}
             </p>
           </div>
         );

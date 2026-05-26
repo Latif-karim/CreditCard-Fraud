@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { Loader2 } from "lucide-react";
 
 import { AuthDivider, AuthPageShell, authBtnClass, authFieldClass, authLabelClass } from "@/components/auth-page-shell";
 import { SocialLoginButtons, getOAuthErrorMessage } from "@/components/social-login-buttons";
@@ -14,6 +15,7 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [result, setResult] = useState("");
+  const [signingIn, setSigningIn] = useState(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -45,7 +47,10 @@ export default function LoginPage() {
 
   const onSubmit = async (event: FormEvent) => {
     event.preventDefault();
-    setResult("Signing in...");
+    if (signingIn) return;
+    setSigningIn(true);
+    setResult("");
+    let navigating = false;
     try {
       const response = await fetch(`${getApiBase()}/auth/login`, {
         method: "POST",
@@ -69,9 +74,14 @@ export default function LoginPage() {
       const qs = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
       const next = qs?.get("next");
       const dest = next && next.startsWith("/dashboard") ? next : "/dashboard";
-      router.push(dest);
-    } catch (error) {
-      setResult(`Error: ${(error as Error).message}`);
+      navigating = true;
+      window.location.assign(dest);
+    } catch {
+      setResult("We couldn't complete sign-in right now. Please try again.");
+    } finally {
+      if (!navigating) {
+        setSigningIn(false);
+      }
     }
   };
 
@@ -121,8 +131,14 @@ export default function LoginPage() {
             className={authFieldClass}
           />
         </div>
-        <button type="submit" className={authBtnClass}>
-          Sign in
+        <button type="submit" disabled={signingIn} className={`${authBtnClass} disabled:opacity-70`}>
+          {signingIn ? (
+            <span className="inline-flex items-center justify-center" aria-label="Signing in">
+              <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
+            </span>
+          ) : (
+            "Sign in"
+          )}
         </button>
         {result ? <p className="text-soft line-clamp-2 text-xs leading-snug">{result}</p> : null}
       </form>

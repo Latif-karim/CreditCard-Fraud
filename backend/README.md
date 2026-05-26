@@ -6,7 +6,19 @@ Enterprise-style API for credit card fraud detection: JWT auth (roles **admin**,
 
 1. Python 3.11+ recommended. Create a venv and install deps: `pip install -r requirements.txt`
 2. Copy `.env.example` to `.env`
-3. Database migrations:
+3. Configure the database:
+
+- Local fallback: leave `DATABASE_URL` empty to use SQLite.
+- Neon/PostgreSQL: set `DATABASE_URL` in `backend/.env` to your Neon pooled connection string, including `sslmode=require`.
+- Demo data auto-seeding is disabled by default for Neon/PostgreSQL. Set `AUTO_SEED_DEMO_DATA=true` only if you intentionally want startup seeding.
+
+Example:
+
+```bash
+DATABASE_URL=postgresql://user:password@ep-example-pooler.region.aws.neon.tech/dbname?sslmode=require
+```
+
+4. Database migrations:
 
 ```bash
 flask --app run db upgrade
@@ -14,21 +26,21 @@ flask --app run db upgrade
 
 If this is a fresh clone after new migrations were added, generate/apply migrations as usual (`db migrate` / `db upgrade`).
 
-4. Run: `python run.py` (CORS enabled for local Next.js.)
+5. Run: `python run.py` (CORS enabled for local Next.js.)
 
 ## Roles
 
 - **admin** — user/rule management, model retrain stub, full audit exports  
 - **analyst** — dashboards, monitoring, fraud lab, explainability  
-- **user** — read-level dashboards (for demos); create analysts via self-registration or admin patch  
+- **user** — cardholder workspace and owned transaction views  
 
-Create an **admin** by registering any account then updating `user.role` to `admin` in the DB, or use `PATCH /admin/users/<id>` from an existing admin session.
+Analyst/admin self-registration creates an access request (`approved=false`). The account signs in as a cardholder while the request is pending, then receives the requested role after an existing admin approves it.
 
 ## Auth
 
 | Method | Path | Notes |
 |--------|------|--------|
-| POST | `/auth/register` | Body: `email`, `password` (8+), optional `full_name`, `role` in `user` \| `analyst` |
+| POST | `/auth/register` | Body: `email`, `password` (8+), optional `full_name`, `role` in `user` \| `analyst` \| `admin`; staff roles require approval |
 | POST | `/auth/login` | Returns JWT + `role` |
 | POST | `/auth/forgot-password` | OTP stored; in **debug**, response may include `dev_otp` |
 | POST | `/auth/verify-otp` | `{ email, otp }` → `{ valid }` |
@@ -42,9 +54,11 @@ Create an **admin** by registering any account then updating `user.role` to `adm
 
 OAuth uses **plain `requests`** (no Authlib). Set in `backend/.env`:
 
+- Copy `backend/.env.example` to `backend/.env` and fill provider credentials. Empty credentials make the frontend show social sign-in as unavailable.
 - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` — redirect URI `http://127.0.0.1:5000/auth/google/callback`
 - `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` — callback `http://127.0.0.1:5000/auth/github/callback`
-- **`OAUTH_SSL_VERIFY=false`** if you see `CERTIFICATE_VERIFY_FAILED` (local dev only; then restart Flask)
+- Copy `frontend/.env.local.example` to `frontend/.env.local` if the API is not running at the default `http://127.0.0.1:5000`.
+- **`OAUTH_SSL_VERIFY=false`** if you see `CERTIFICATE_VERIFY_FAILED` in local development
 - **`getaddrinfo failed`:** check internet/DNS/VPN
 
 ## Transactions
@@ -80,7 +94,8 @@ OAuth uses **plain `requests`** (no Authlib). Set in `backend/.env`:
 
 ## Admin (JWT **admin**)
 
-- `GET /admin/users`, `PATCH /admin/users/<id>`, `DELETE /admin/users/<id>` — remove user and their data
+- `GET /admin/users`, `PATCH /admin/users/<id>`, `DELETE /admin/users/<id>` — manage users and their data
+- `POST /admin/users/<id>/approve`, `POST /admin/users/<id>/reject` — review analyst/admin access requests
 - `GET /admin/system/stats` — record counts for maintenance UI
 - `POST /admin/data/purge-transactions` — body `{ "confirm": "DELETE_ALL_TRANSACTIONS" }` wipes all transaction-related data
 - `PATCH /admin/rules/<id>` — toggle `FraudRule.enabled`

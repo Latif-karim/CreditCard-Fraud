@@ -73,6 +73,8 @@ def export_transactions_csv():
 @reports_bp.get("/summary.json")
 @jwt_required()
 def summary_json():
+    if not is_staff():
+        return jsonify({"error": "Staff role required"}), 403
     _ensure_report_data()
     from sqlalchemy import func
 
@@ -101,6 +103,8 @@ def summary_json():
 @reports_bp.get("/audit-export.json")
 @jwt_required()
 def audit_export():
+    if not is_staff():
+        return jsonify({"error": "Staff role required"}), 403
     _ensure_report_data()
     logs = AuditLog.query.order_by(AuditLog.created_at.desc()).limit(500).all()
     payload = [
@@ -124,6 +128,8 @@ def audit_export():
 @reports_bp.get("/summary.pdf")
 @jwt_required()
 def summary_pdf():
+    if not is_staff():
+        return jsonify({"error": "Staff role required"}), 403
     _ensure_report_data()
     try:
         from fpdf import FPDF

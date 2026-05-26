@@ -45,12 +45,13 @@ def create_app(config_class=Config):
     def health():
         return jsonify({"status": "ok"}), 200
 
-    with app.app_context():
-        from .services.seed_data import seed_all
+    if app.config.get("AUTO_SEED_DEMO_DATA"):
+        with app.app_context():
+            from .services.seed_data import seed_all
 
-        try:
-            seed_all(min_transactions=80)
-        except Exception:
-            pass
+            try:
+                seed_all(min_transactions=80)
+            except Exception:
+                pass
 
     return app

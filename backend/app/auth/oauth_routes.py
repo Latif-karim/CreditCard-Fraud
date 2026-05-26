@@ -65,10 +65,11 @@ def _issue_redirect(*, user=None, error: str | None = None) -> str:
         return _frontend_callback(error="oauth_failed")
     if not user.is_active:
         return _frontend_callback(error="account_suspended")
-    token = create_access_token(identity=str(user.id), additional_claims={"role": user.role})
+    effective_role = "user" if user.role in ("admin", "analyst") and not user.approved else user.role
+    token = create_access_token(identity=str(user.id), additional_claims={"role": effective_role})
     return _frontend_callback(
         access_token=token,
-        role=user.role,
+        role=effective_role,
         user_id=str(user.id),
         email_verified="1" if user.email_verified else "0",
     )
@@ -116,7 +117,7 @@ def oauth_providers():
 @oauth_bp.get("/google")
 def google_login():
     if not _google_configured():
-        return jsonify({"error": "Google sign-in is not configured"}), 503
+        return jsonify({"error": "Google sign-in is currently unavailable"}), 503
 
     redirect_uri = url_for("oauth.google_callback", _external=True)
     state = _new_oauth_state("google")
@@ -199,7 +200,7 @@ def google_callback():
 @oauth_bp.get("/github")
 def github_login():
     if not _github_configured():
-        return jsonify({"error": "GitHub sign-in is not configured"}), 503
+        return jsonify({"error": "GitHub sign-in is currently unavailable"}), 503
 
     redirect_uri = url_for("oauth.github_callback", _external=True)
     state = _new_oauth_state("github")

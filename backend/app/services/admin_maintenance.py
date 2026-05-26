@@ -8,6 +8,7 @@ from ..extensions import db
 from ..models import (
     Alert,
     AuditLog,
+    DisputeCase,
     FraudDecision,
     FraudNotification,
     Transaction,
@@ -22,6 +23,7 @@ def count_platform_records() -> dict:
         "users": User.query.count(),
         "transactions": Transaction.query.count(),
         "fraud_decisions": FraudDecision.query.count(),
+        "disputes": DisputeCase.query.count(),
         "alerts": Alert.query.count(),
         "notifications": FraudNotification.query.count(),
         "audit_logs": AuditLog.query.count(),
@@ -36,6 +38,9 @@ def _delete_transactions_by_ids(tx_ids: list[int]) -> int:
     )
     Alert.query.filter(Alert.transaction_id.in_(tx_ids)).delete(synchronize_session=False)
     FraudNotification.query.filter(FraudNotification.transaction_id.in_(tx_ids)).delete(
+        synchronize_session=False
+    )
+    DisputeCase.query.filter(DisputeCase.transaction_id.in_(tx_ids)).delete(
         synchronize_session=False
     )
     return Transaction.query.filter(Transaction.id.in_(tx_ids)).delete(synchronize_session=False)
@@ -112,6 +117,7 @@ def delete_transaction_by_id(transaction_id: int) -> dict:
 def purge_all_transaction_data() -> dict:
     """Delete every transaction and dependent fraud/alert records. Users are kept."""
     decisions_removed = FraudDecision.query.delete(synchronize_session=False)
+    disputes_removed = DisputeCase.query.delete(synchronize_session=False)
     alerts_removed = Alert.query.delete(synchronize_session=False)
     notifications_removed = FraudNotification.query.delete(synchronize_session=False)
     transactions_removed = Transaction.query.delete(synchronize_session=False)
@@ -124,6 +130,7 @@ def purge_all_transaction_data() -> dict:
     return {
         "transactions_removed": transactions_removed,
         "fraud_decisions_removed": decisions_removed,
+        "disputes_removed": disputes_removed,
         "alerts_removed": alerts_removed,
         "notifications_removed": notifications_removed,
     }

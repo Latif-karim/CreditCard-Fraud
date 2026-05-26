@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import joblib
-import numpy as np
+import pandas as pd
 
 
 @dataclass
@@ -42,7 +42,11 @@ def predict_fraud_probability(
     amount: float, tx_frequency_10m: int, minutes_since_last: float
 ) -> ModelResult:
     bundle = _load_model_bundle()
-    features = np.array([[amount, tx_frequency_10m, minutes_since_last]], dtype=float)
+    values = [amount, tx_frequency_10m, minutes_since_last]
+    feature_order = bundle.get(
+        "feature_order", ["Amount", "tx_frequency_10m", "minutes_since_last"]
+    )
+    features = pd.DataFrame([values], columns=feature_order)
     model = bundle.get("model")
     if model is not None:
         probability = float(model.predict_proba(features)[0][1])

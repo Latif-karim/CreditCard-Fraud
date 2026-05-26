@@ -49,7 +49,7 @@ const SimpleBarChart = dynamic(
 import { KpiCard } from "@/components/kpi-card";
 import { RiskHeatmap } from "@/components/risk-heatmap";
 import { ScrollReveal } from "@/components/scroll-reveal";
-import { fetchWithAuth } from "@/lib/api";
+import { fetchWithAuth, postWithAuth } from "@/lib/api";
 import type {
   AuditLog,
   DashboardOverview,
@@ -58,6 +58,7 @@ import type {
   LabelValueResponse,
   LiveActivityItem,
   TrendResponse,
+  FraudNotification,
 } from "@/lib/types";
 
 type RecentTx = {
@@ -67,6 +68,8 @@ type RecentTx = {
   confidence: number;
   created_at: string;
   location: string;
+  merchant?: string | null;
+  customer_status?: string;
 };
 
 export default function DashboardPage() {
@@ -84,17 +87,48 @@ export default function DashboardPage() {
   const [heatmap, setHeatmap] = useState<HeatmapResponse | null>(null);
   const [recent, setRecent] = useState<RecentTx[]>([]);
   const [live, setLive] = useState<LiveActivityItem[]>([]);
+  const [notifications, setNotifications] = useState<FraudNotification[]>([]);
   const [modelMetrics, setModelMetrics] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(true);
+  const [disputeBusy, setDisputeBusy] = useState<number | null>(null);
+  const [disputeNotice, setDisputeNotice] = useState("");
 
   useEffect(() => {
+    if (!hydrated || !role) return;
     const token = localStorage.getItem("access_token") || "";
     const load = async () => {
       setLoading(true);
+      setDisputeNotice("");
       try {
         setOverview(await fetchWithAuth<DashboardOverview>("/dashboard/overview", token));
       } catch {
         setOverview(null);
+      }
+      if (role === "user") {
+        try {
+          setRecent(await fetchWithAuth<RecentTx[]>("/dashboard/recent-transactions", token));
+        } catch {
+          setRecent([]);
+        }
+        try {
+          setLive(await fetchWithAuth<LiveActivityItem[]>("/dashboard/live-activity", token));
+        } catch {
+          setLive([]);
+        }
+        try {
+          setNotifications(await fetchWithAuth<FraudNotification[]>("/alerts/notifications", token));
+        } catch {
+          setNotifications([]);
+        } finally {
+          setFlagged([]);
+          setAuditLogs([]);
+          setRegion(null);
+          setCardType(null);
+          setHeatmap(null);
+          setModelMetrics(null);
+          setLoading(false);
+        }
+        return;
       }
       try {
         setTrends(await fetchWithAuth<TrendResponse>("/dashboard/trends", token));
@@ -149,7 +183,7 @@ export default function DashboardPage() {
       }
     };
     void load();
-  }, [isStaff]);
+  }, [hydrated, isStaff, role]);
 
   const view = overview ?? {
     total_transactions: 124302,
@@ -159,6 +193,15 @@ export default function DashboardPage() {
     total_volume: 1293300,
     active_users: 8420,
     revenue_protected: 920000,
+  };
+  const customerView = overview ?? {
+    total_transactions: 0,
+    flagged_transactions: 0,
+    approved_transactions: 0,
+    fraud_rate: 0,
+    total_volume: 0,
+    active_users: 1,
+    revenue_protected: 0,
   };
 
   const trendView = trends ?? {
@@ -234,6 +277,29 @@ export default function DashboardPage() {
           { title: "User login from new device", detail: "New fingerprint + ASN", time: "8 min ago" },
         ];
 
+  const submitDispute = async (txId: number, reason: "not_mine" | "request_review") => {
+    const token = localStorage.getItem("access_token") || "";
+    setDisputeBusy(txId);
+    setDisputeNotice("");
+    try {
+      const res = await postWithAuth<{ message: string; transaction_status: string }>(
+        `/transactions/${txId}/dispute`,
+        { reason },
+        token
+      );
+      setRecent((prev) =>
+        prev.map((tx) =>
+          tx.id === txId ? { ...tx, status: res.transaction_status, customer_status: "Under Review" } : tx
+        )
+      );
+      setDisputeNotice(res.message);
+    } catch (err) {
+      setDisputeNotice((err as Error).message);
+    } finally {
+      setDisputeBusy(null);
+    }
+  };
+
   const subtitle =
     !hydrated || !role
       ? "Command center"
@@ -245,7 +311,7 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <AppShell title="Operations dashboard" subtitle={subtitle}>
+      <AppShell title={role === "user" ? "Cardholder dashboard" : "Operations dashboard"} subtitle={subtitle}>
         <div className="space-y-5">
           <RoleBanner />
           <Skeleton className="h-8 w-48 rounded-full" />
@@ -261,6 +327,148 @@ export default function DashboardPage() {
             <ListSkeleton items={4} />
           </div>
           {isStaff ? <TableSkeleton rows={4} cols={3} /> : null}
+        </div>
+      </AppShell>
+    );
+  }
+
+  if (role === "user") {
+    return (
+      <AppShell title="Cardholder dashboard" subtitle="Your card activity and alerts">
+        <div className="space-y-5">
+          <RoleBanner />
+          {disputeNotice ? (
+            <p className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-900 dark:border-sky-900 dark:bg-sky-950/40 dark:text-sky-200">
+              {disputeNotice}
+            </p>
+          ) : null}
+
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <KpiCard
+              icon={CreditCard}
+              title="Your transactions"
+              value={Number(customerView.total_transactions).toLocaleString()}
+              subtitle="Only your account"
+              tone="info"
+            />
+            <KpiCard
+              icon={ShieldAlert}
+              title="Under review"
+              value={Number(customerView.flagged_transactions).toLocaleString()}
+              subtitle="Needs verification"
+              tone="warning"
+            />
+            <KpiCard
+              icon={CheckCircle2}
+              title="Safe"
+              value={Number(customerView.approved_transactions).toLocaleString()}
+              subtitle="Approved activity"
+              tone="success"
+            />
+            <KpiCard
+              icon={Wallet}
+              title="Total spent"
+              value={`$${Math.round(customerView.total_volume).toLocaleString()}`}
+              subtitle="Personal history"
+              tone="default"
+            />
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-2">
+            <div className="glass-card p-4">
+              <PanelTitle icon={Bell} title="Fraud alerts" />
+              <div className="space-y-3">
+                {notifications.map((n) => (
+                  <div
+                    key={n.id}
+                    className="rounded-xl border border-amber-200 bg-amber-50/60 p-3 text-sm dark:border-amber-900 dark:bg-amber-950/30"
+                  >
+                    <p className="font-semibold text-slate-900 dark:text-white">{n.title}</p>
+                    <p className="text-soft mt-1 text-xs">{n.body}</p>
+                    <p className="text-soft mt-2 text-[10px] uppercase tracking-wide">
+                      {new Date(n.created_at).toLocaleString()}
+                    </p>
+                  </div>
+                ))}
+                {!notifications.length ? (
+                  <p className="text-soft rounded-xl border border-slate-200 px-3 py-2 text-sm dark:border-slate-800">
+                    No account alerts right now.
+                  </p>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="glass-card p-4">
+              <PanelTitle icon={Radio} title="Account activity" />
+              <ul className="space-y-3 text-sm">
+                {live.map((item, idx) => (
+                  <li key={`${item.title}-${idx}`} className="rounded-xl border border-slate-200 px-3 py-2 dark:border-slate-800">
+                    <p className="font-medium text-slate-900 dark:text-white">{item.title}</p>
+                    <p className="text-soft text-xs">{item.detail}</p>
+                    <p className="text-soft mt-1 text-[10px] uppercase tracking-wide">{item.time}</p>
+                  </li>
+                ))}
+                {!live.length ? <p className="text-soft text-sm">No recent activity.</p> : null}
+              </ul>
+            </div>
+          </div>
+
+          <div className="glass-card scroll-mt-4 p-4">
+            <PanelTitle icon={ArrowLeftRight} title="Personal transactions" />
+            <p className="text-soft -mt-2 mb-3 text-xs">
+              Customer view shows simplified risk status only. Use Report or Not mine to request analyst review.
+            </p>
+            <div className="w-full overflow-x-auto">
+              <table className="w-full min-w-[760px] border-collapse text-sm">
+                <thead>
+                  <tr className="text-soft border-b border-slate-200 dark:border-slate-800">
+                    <th className="pb-2 text-left">Date</th>
+                    <th className="pb-2 text-left">Merchant</th>
+                    <th className="pb-2 text-left">Amount</th>
+                    <th className="pb-2 text-left">Location</th>
+                    <th className="pb-2 text-left">Status</th>
+                    <th className="pb-2 text-left">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {recent.map((tx) => (
+                    <tr key={tx.id} className="border-b border-slate-100 last:border-0 dark:border-slate-800">
+                      <td className="py-2">{tx.created_at ? new Date(tx.created_at).toLocaleDateString() : "—"}</td>
+                      <td className="py-2">{tx.merchant || "Merchant"}</td>
+                      <td className="py-2">${tx.amount.toFixed(2)}</td>
+                      <td className="py-2">{tx.location}</td>
+                      <td className="py-2">
+                        <CustomerStatusBadge status={tx.customer_status || tx.status} />
+                      </td>
+                      <td className="py-2">
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            disabled={disputeBusy !== null}
+                            onClick={() => void submitDispute(tx.id, "request_review")}
+                            className="rounded border border-sky-200 px-2 py-1 text-xs font-medium text-sky-700 disabled:opacity-40 dark:border-sky-900 dark:text-sky-300"
+                          >
+                            Request review
+                          </button>
+                          <button
+                            type="button"
+                            disabled={disputeBusy !== null}
+                            onClick={() => void submitDispute(tx.id, "not_mine")}
+                            className="rounded border border-red-200 px-2 py-1 text-xs font-medium text-red-700 disabled:opacity-40 dark:border-red-900 dark:text-red-400"
+                          >
+                            {disputeBusy === tx.id ? "…" : "Not mine"}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {!recent.length ? (
+                <p className="text-soft py-4 text-sm">No transactions have been recorded for your account.</p>
+              ) : null}
+            </div>
+          </div>
         </div>
       </AppShell>
     );
@@ -548,6 +756,23 @@ function HealthRow({
       <span className={`text-sm font-semibold ${valueClass}`}>{value}</span>
     </div>
   );
+}
+
+function CustomerStatusBadge({ status }: { status: string }) {
+  const normalized = status.toLowerCase();
+  const label =
+    normalized === "flagged" || normalized === "disputed" || normalized === "under review"
+      ? "Under Review"
+      : normalized === "declined" || normalized === "blocked"
+        ? "Blocked"
+        : "Safe";
+  const cls =
+    label === "Blocked"
+      ? "bg-red-500/15 text-red-700 dark:text-red-300"
+      : label === "Under Review"
+        ? "bg-amber-500/15 text-amber-800 dark:text-amber-300"
+        : "bg-emerald-500/15 text-emerald-800 dark:text-emerald-300";
+  return <span className={`inline-block rounded-md px-2 py-0.5 text-xs font-semibold ${cls}`}>{label}</span>;
 }
 
 function MetricPill({

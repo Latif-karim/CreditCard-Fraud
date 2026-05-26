@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Cpu, Database, Trash2, Users } from "lucide-react";
+import { Cpu, Database, ShieldCheck, Trash2, Users, XCircle } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
 import { RoleGuard } from "@/components/role-guard";
@@ -56,12 +56,15 @@ export default function AdminPage() {
       setRules(r);
       setStats(s);
       setSelfId(me.id);
+      await loadTransactions(1);
     } catch (e) {
       setErr((e as Error).message);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [loadTransactions]);
+
+  const pendingRequests = users.filter((u) => (u.role === "analyst" || u.role === "admin") && !u.approved);
 
   useEffect(() => {
     void loadAll();
@@ -106,6 +109,31 @@ export default function AdminPage() {
       );
       await loadAll();
       setOk(`${res.message} (${res.transactions_removed} transactions removed).`);
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const reviewAccess = async (u: AdminUser, decision: "approve" | "reject") => {
+    const label = decision === "approve" ? "approve" : "reject";
+    const actionLabel = `${label.charAt(0).toUpperCase()}${label.slice(1)}`;
+    if (!window.confirm(`${actionLabel} ${u.role} access for ${u.email}?`)) {
+      return;
+    }
+
+    setBusy(`review-${u.id}`);
+    setErr("");
+    setOk("");
+    try {
+      const res = await postWithAuth<{ message: string }>(
+        `/admin/users/${u.id}/${decision}`,
+        {},
+        token()
+      );
+      await loadAll();
+      setOk(res.message);
     } catch (e) {
       setErr((e as Error).message);
     } finally {
@@ -215,6 +243,65 @@ export default function AdminPage() {
             </div>
 
             <div className="glass-card mb-4 p-4">
+              <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold">
+                <ShieldCheck className="h-4 w-4" />
+                Pending requests
+              </h3>
+              <p className="text-soft mb-3 text-xs">
+                Analyst and admin registrations stay locked until an existing administrator reviews them.
+              </p>
+              {pendingRequests.length ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-soft text-left">
+                        <th className="pb-2 pr-3">Name</th>
+                        <th className="pb-2 pr-3">Email</th>
+                        <th className="pb-2 pr-3">Requested access</th>
+                        <th className="pb-2">Decision</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {pendingRequests.map((u) => (
+                        <tr key={u.id} className="border-t border-slate-100 dark:border-slate-800">
+                          <td className="py-2 pr-3">{u.full_name || "Not provided"}</td>
+                          <td className="py-2 pr-3">{u.email}</td>
+                          <td className="py-2 pr-3 capitalize">{u.role}</td>
+                          <td className="py-2">
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                disabled={busy !== null}
+                                onClick={() => void reviewAccess(u, "approve")}
+                                className="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-2 py-1 text-xs font-medium text-white disabled:opacity-40"
+                              >
+                                <ShieldCheck className="h-3 w-3" />
+                                {busy === `review-${u.id}` ? "…" : "Approve"}
+                              </button>
+                              <button
+                                type="button"
+                                disabled={busy !== null}
+                                onClick={() => void reviewAccess(u, "reject")}
+                                className="inline-flex items-center gap-1 rounded-md border border-red-200 px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-50 disabled:opacity-40 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950/40"
+                              >
+                                <XCircle className="h-3 w-3" />
+                                Reject
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="rounded-lg border border-slate-200 bg-white/60 px-3 py-2 text-sm text-slate-600 dark:border-slate-800 dark:bg-slate-950/40 dark:text-slate-300">
+                  No pending access requests.
+                </p>
+              )}
+            </div>
+
+            <div className="glass-card mb-4 p-4">
               <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold">
                 <Database className="h-4 w-4" />
                 Data maintenance
@@ -226,6 +313,7 @@ export default function AdminPage() {
                       ["Users", stats.users],
                       ["Transactions", stats.transactions],
                       ["Decisions", stats.fraud_decisions],
+                      ["Disputes", stats.disputes],
                       ["Alerts", stats.alerts],
                       ["Notifications", stats.notifications],
                       ["Audit logs", stats.audit_logs],
@@ -374,6 +462,7 @@ export default function AdminPage() {
                       <th className="pb-2">Email</th>
                       <th className="pb-2">Role</th>
                       <th className="pb-2">Active</th>
+                      <th className="pb-2">Approval</th>
                       <th className="pb-2">Actions</th>
                     </tr>
                   </thead>
@@ -401,6 +490,17 @@ export default function AdminPage() {
                             </select>
                           </td>
                           <td className="py-2">{u.is_active ? "Yes" : "No"}</td>
+                          <td className="py-2">
+                            <span
+                              className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                                u.approved
+                                  ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+                                  : "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
+                              }`}
+                            >
+                              {u.approved ? "Approved" : "Pending"}
+                            </span>
+                          </td>
                           <td className="py-2">
                             <div className="flex flex-wrap items-center gap-2">
                               <button

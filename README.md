@@ -40,7 +40,7 @@ npm run dev
    `http://127.0.0.1:5000/auth/google/callback`
 3. **GitHub:** Settings → Developer settings → OAuth App → callback  
    `http://127.0.0.1:5000/auth/github/callback`
-4. Restart the Flask API. Login/register pages show **Continue with Google/GitHub** when configured.
+4. Apply the configuration and redeploy the API. Login/register pages show **Continue with Google/GitHub** when configured.
 
 For local development on Windows, if OAuth SSL verification fails, set `OAUTH_SSL_VERIFY=false` in `backend/.env` (development only).
 

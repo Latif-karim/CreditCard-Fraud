@@ -10,9 +10,11 @@ import { HorizontalFeatureChart } from "@/components/charts/horizontal-feature-c
 import { ScrollReveal } from "@/components/scroll-reveal";
 import { fetchWithAuth } from "@/lib/api";
 import type { ExplainTransactionResponse } from "@/lib/types";
+import { useUserRole } from "@/lib/use-user-role";
 
 export default function ExplainPage() {
   const searchParams = useSearchParams();
+  const role = useUserRole();
   const [txId, setTxId] = useState("");
   const [data, setData] = useState<ExplainTransactionResponse | null>(null);
   const [err, setErr] = useState("");
@@ -45,7 +47,10 @@ export default function ExplainPage() {
   }, [searchParams, load]);
 
   return (
-    <AppShell title="AI explainability" subtitle="Interpretability & transparency">
+    <AppShell
+      title={role === "user" ? "Transaction status" : "AI explainability"}
+      subtitle={role === "user" ? "Customer-friendly review status" : "Interpretability & transparency"}
+    >
       <div className="glass-card mb-4 flex flex-wrap items-end gap-2 p-4">
         <div className="min-w-[200px] flex-1">
           <label className="text-soft text-xs">Transaction ID</label>
@@ -63,7 +68,7 @@ export default function ExplainPage() {
           className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white dark:bg-white dark:text-slate-900"
         >
           <Search className="h-4 w-4" />
-          Explain
+          {role === "user" ? "Check status" : "Explain"}
         </button>
       </div>
       {err ? <p className="text-sm text-red-600">{err}</p> : null}
@@ -74,15 +79,24 @@ export default function ExplainPage() {
         </div>
       ) : null}
       {!loading && data ? (
+        role === "user" ? (
+          <div className="glass-card p-4">
+            <p className="text-soft text-xs">Transaction #{data.transaction_id}</p>
+            <p className="mt-2 text-2xl font-semibold">{data.customer_status || data.status}</p>
+            <p className="text-soft mt-2 text-sm">
+              {data.message || "This transaction status is available in your account activity."}
+            </p>
+          </div>
+        ) : (
         <div className="space-y-4">
           <div className="glass-card grid gap-3 p-4 sm:grid-cols-3">
             <div>
               <p className="text-soft text-xs">Risk</p>
-              <p className="text-xl font-semibold">{data.risk_score.toFixed(1)}</p>
+              <p className="text-xl font-semibold">{(data.risk_score ?? 0).toFixed(1)}</p>
             </div>
             <div>
               <p className="text-soft text-xs">ML probability</p>
-              <p className="text-xl font-semibold">{(data.ml_probability * 100).toFixed(1)}%</p>
+              <p className="text-xl font-semibold">{((data.ml_probability ?? 0) * 100).toFixed(1)}%</p>
             </div>
             <div>
               <p className="text-soft text-xs">Decision</p>
@@ -92,7 +106,7 @@ export default function ExplainPage() {
           <div className="glass-card p-4">
             <h3 className="mb-2 text-sm font-semibold">Stored reasons</h3>
             <ul className="list-disc space-y-1 pl-5 text-sm text-slate-700 dark:text-slate-200">
-              {data.stored_reasons.map((r, i) => (
+              {(data.stored_reasons || []).map((r, i) => (
                 <li key={i}>{r}</li>
               ))}
             </ul>
@@ -100,13 +114,14 @@ export default function ExplainPage() {
           <ScrollReveal placeholderClassName="min-h-[260px]">
             <HorizontalFeatureChart
               title="Feature influence ranking"
-              rows={data.feature_importance.map((f) => ({ feature: f.feature, contribution: f.contribution }))}
+              rows={(data.feature_importance || []).map((f) => ({ feature: f.feature, contribution: f.contribution }))}
             />
           </ScrollReveal>
           <p className="text-soft text-xs">
             Feature influence rankings help analysts understand why a transaction received its risk score.
           </p>
         </div>
+        )
       ) : null}
     </AppShell>
   );

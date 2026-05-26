@@ -1,19 +1,19 @@
 from flask import Blueprint, jsonify
-from flask_jwt_extended import get_jwt, jwt_required
+from flask_jwt_extended import jwt_required
 from sqlalchemy import case, func
 
 from ..models import AuditLog, FraudDecision, FraudRule, Transaction, User
-from ..services.rbac import is_cardholder, is_staff, scope_transactions
+from ..services.rbac import current_role, is_admin, is_cardholder, is_staff, scope_transactions
 
 dashboard_bp = Blueprint("dashboard", __name__, url_prefix="/dashboard")
 
 
 def _staff_ok():
-    return get_jwt().get("role") in ("admin", "analyst", "user")
+    return current_role() in ("admin", "analyst", "user")
 
 
 def _admin_only():
-    return get_jwt().get("role") == "admin"
+    return is_admin()
 
 
 @dashboard_bp.get("/overview")
@@ -52,7 +52,7 @@ def overview():
 @dashboard_bp.get("/fraud-vs-legit")
 @jwt_required()
 def fraud_vs_legit():
-    if not _staff_ok():
+    if not is_staff():
         return jsonify({"error": "Forbidden"}), 403
     base = scope_transactions(Transaction.query)
     flagged = base.filter(Transaction.status == "flagged").count()
@@ -63,7 +63,7 @@ def fraud_vs_legit():
 @dashboard_bp.get("/trends")
 @jwt_required()
 def trends():
-    if not _staff_ok():
+    if not is_staff():
         return jsonify({"error": "Forbidden"}), 403
     rows = (
         scope_transactions(Transaction.query)
@@ -92,7 +92,7 @@ def trends():
 @dashboard_bp.get("/risk-distribution")
 @jwt_required()
 def risk_distribution():
-    if not _staff_ok():
+    if not is_staff():
         return jsonify({"error": "Forbidden"}), 403
     base = scope_transactions(Transaction.query)
     ranges = {
@@ -107,7 +107,7 @@ def risk_distribution():
 @dashboard_bp.get("/top-locations")
 @jwt_required()
 def top_locations():
-    if not _staff_ok():
+    if not is_staff():
         return jsonify({"error": "Forbidden"}), 403
     rows = (
         scope_transactions(Transaction.query)
@@ -139,7 +139,7 @@ def top_locations():
 @dashboard_bp.get("/fraud-by-region")
 @jwt_required()
 def fraud_by_region():
-    if not _staff_ok():
+    if not is_staff():
         return jsonify({"error": "Forbidden"}), 403
     rows = (
         Transaction.query.with_entities(Transaction.country, func.count(Transaction.id))
@@ -154,7 +154,7 @@ def fraud_by_region():
 @dashboard_bp.get("/fraud-by-card")
 @jwt_required()
 def fraud_by_card():
-    if not _staff_ok():
+    if not is_staff():
         return jsonify({"error": "Forbidden"}), 403
     rows = (
         scope_transactions(Transaction.query)
@@ -182,9 +182,11 @@ def recent_transactions():
                 "id": tx.id,
                 "amount": tx.amount,
                 "status": tx.status,
-                "confidence": tx.confidence or (dec.ml_probability if dec else 0.0),
+                "confidence": 0.0 if is_cardholder() else tx.confidence or (dec.ml_probability if dec else 0.0),
                 "created_at": tx.created_at.isoformat(),
                 "location": tx.location,
+                "merchant": tx.merchant,
+                "customer_status": customer_status(tx),
             }
         )
     return jsonify(out), 200
@@ -200,7 +202,7 @@ def live_activity():
         feed = [
             {
                 "title": f"Transaction #{tx.id}",
-                "detail": f"${tx.amount:.2f} · {tx.location} · risk {tx.risk_score:.0f}",
+                "detail": f"${tx.amount:.2f} · {tx.location} · {customer_status(tx)}",
                 "time": tx.created_at.isoformat(),
             }
             for tx in rows
@@ -237,7 +239,7 @@ def live_activity():
 @dashboard_bp.get("/heatmap")
 @jwt_required()
 def heatmap():
-    if not _staff_ok():
+    if not is_staff():
         return jsonify({"error": "Forbidden"}), 403
     rows = (
         scope_transactions(Transaction.query)
@@ -263,7 +265,7 @@ def heatmap():
 @dashboard_bp.get("/model-metrics")
 @jwt_required()
 def model_metrics():
-    if not _staff_ok():
+    if not is_staff():
         return jsonify({"error": "Forbidden"}), 403
     return (
         jsonify(
@@ -326,3 +328,12 @@ def list_rules():
 def db_safe_scalar(query):
     row = query.first()
     return float(row[0]) if row and row[0] is not None else 0.0
+
+
+def customer_status(tx: Transaction) -> str:
+    status = (tx.status or "").lower()
+    if status in ("declined", "blocked", "frozen"):
+        return "Blocked"
+    if status in ("flagged", "disputed", "pending"):
+        return "Under Review"
+    return "Safe"

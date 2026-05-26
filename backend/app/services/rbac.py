@@ -1,12 +1,20 @@
 """Role-based access helpers for API routes."""
 
-from flask_jwt_extended import get_jwt, get_jwt_identity
+from flask_jwt_extended import get_jwt_identity
 
-from ..models import Transaction
+from ..models import Transaction, User
 
 
 def current_role() -> str | None:
-    return get_jwt().get("role")
+    identity = actor_user_id()
+    if identity is None:
+        return None
+    user = User.query.get(identity)
+    if not user or not user.is_active:
+        return None
+    if user.role in ("admin", "analyst") and not user.approved:
+        return "user"
+    return user.role
 
 
 def actor_user_id() -> int | None:

@@ -32,31 +32,38 @@ export default function RegisterPage() {
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setMsg("Creating account…");
-    const res = await fetch(`${getApiBase()}/auth/register`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password, full_name: fullName, role }),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      const detail = data.details?.email?.[0] || data.details?.role?.[0];
-      setMsg(detail || data.error || "Registration failed");
-      return;
-    }
+    try {
+      const res = await fetch(`${getApiBase()}/auth/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password, full_name: fullName, role }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        const detail = data.details?.email?.[0] || data.details?.role?.[0];
+        setMsg(detail || data.error || "Registration failed");
+        return;
+      }
+      if (data.awaiting_approval) {
+        setMsg(data.message || "Access request submitted. Opening your cardholder workspace...");
+      }
 
-    const loginRes = await fetch(`${getApiBase()}/auth/login`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
-    });
-    const loginData = await loginRes.json();
-    if (loginRes.ok && loginData.access_token) {
-      setClientSession(loginData.access_token, loginData.role, loginData.user_id);
-      router.push("/dashboard");
-      return;
-    }
+      const loginRes = await fetch(`${getApiBase()}/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+      const loginData = await loginRes.json();
+      if (loginRes.ok && loginData.access_token) {
+        setClientSession(loginData.access_token, loginData.role, loginData.user_id);
+        router.push("/dashboard");
+        return;
+      }
 
-    router.push("/login");
+      router.push("/login");
+    } catch {
+      setMsg("We couldn't create your account right now. Please try again.");
+    }
   };
 
   const tabClass = (active: boolean) =>
@@ -127,17 +134,22 @@ export default function RegisterPage() {
             />
           </div>
           <div>
-            <label className={authLabelClass}>Role</label>
+            <label className={authLabelClass}>Access level</label>
             <select
               className={authFieldClass}
               value={role}
-              title="Cardholder, analyst, or admin"
+              title="Choose a standard account or request elevated access"
               onChange={(e) => setRole(e.target.value as AppRole)}
             >
               <option value="user">{ROLE_LABELS.user}</option>
-              <option value="analyst">{ROLE_LABELS.analyst}</option>
-              <option value="admin">{ROLE_LABELS.admin}</option>
+              <option value="analyst">Request Analyst Access</option>
+              <option value="admin">Request Admin Access</option>
             </select>
+            {role === "analyst" || role === "admin" ? (
+              <p className="text-soft mt-1 text-[0.65rem] leading-snug">
+                You can use the cardholder workspace while an administrator reviews elevated access.
+              </p>
+            ) : null}
           </div>
           <button type="submit" className={authBtnClass}>
             Create account
@@ -154,7 +166,7 @@ export default function RegisterPage() {
       ) : (
         <div className="space-y-4 py-2">
           <p className="text-soft text-xs leading-relaxed">
-            Creates a cardholder account. Use Email for analyst or admin roles.
+            Social sign-in creates a cardholder account. Use Email to request analyst or admin access.
           </p>
           <SocialLoginButtons />
         </div>

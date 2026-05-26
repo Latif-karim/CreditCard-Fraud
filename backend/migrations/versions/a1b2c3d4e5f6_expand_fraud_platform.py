@@ -5,6 +5,8 @@ Revises: 20d7d22b4f8c
 Create Date: 2026-05-13
 
 """
+from datetime import datetime
+
 from alembic import op
 import sqlalchemy as sa
 
@@ -72,20 +74,52 @@ def upgrade():
         sa.Column("description", sa.Text(), nullable=False),
         sa.Column("enabled", sa.Boolean(), nullable=False, server_default="1"),
         sa.Column("priority", sa.Integer(), nullable=False, server_default="100"),
-        sa.Column("updated_at", sa.DateTime(), nullable=False, server_default=sa.text("(datetime('now'))")),
+        sa.Column("updated_at", sa.DateTime(), nullable=False, server_default=sa.func.now()),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("name"),
     )
 
-    op.execute(
-        """
-        INSERT INTO fraud_rule (name, description, enabled, priority, updated_at)
-        VALUES
-        ('velocity_window', 'Flags burst transactions within 10 minutes', 1, 10, datetime('now')),
-        ('high_amount', 'Flags amounts above configured threshold', 1, 20, datetime('now')),
-        ('location_mismatch', 'Flags location change vs recent activity', 1, 30, datetime('now')),
-        ('behavior_deviation', 'Compares spend vs user profile average', 1, 40, datetime('now'))
-        """
+    fraud_rule = sa.table(
+        "fraud_rule",
+        sa.column("name", sa.String),
+        sa.column("description", sa.Text),
+        sa.column("enabled", sa.Boolean),
+        sa.column("priority", sa.Integer),
+        sa.column("updated_at", sa.DateTime),
+    )
+    now = datetime.utcnow()
+    op.bulk_insert(
+        fraud_rule,
+        [
+            {
+                "name": "velocity_window",
+                "description": "Flags burst transactions within 10 minutes",
+                "enabled": True,
+                "priority": 10,
+                "updated_at": now,
+            },
+            {
+                "name": "high_amount",
+                "description": "Flags amounts above configured threshold",
+                "enabled": True,
+                "priority": 20,
+                "updated_at": now,
+            },
+            {
+                "name": "location_mismatch",
+                "description": "Flags location change vs recent activity",
+                "enabled": True,
+                "priority": 30,
+                "updated_at": now,
+            },
+            {
+                "name": "behavior_deviation",
+                "description": "Compares spend vs user profile average",
+                "enabled": True,
+                "priority": 40,
+                "updated_at": now,
+            },
+        ],
     )
 
 

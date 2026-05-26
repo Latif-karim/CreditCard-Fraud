@@ -14,9 +14,10 @@ const ERROR_MESSAGES: Record<string, string> = {
     "Could not verify the identity provider's security certificate. Contact your administrator.",
   oauth_network_error:
     "Could not reach Google/GitHub. Check your internet connection and DNS, then try again.",
-  google_not_configured: "Google sign-in is not configured on the server.",
-  github_not_configured: "GitHub sign-in is not configured on the server.",
+  google_not_configured: "Google sign-in is currently unavailable.",
+  github_not_configured: "GitHub sign-in is currently unavailable.",
   account_suspended: "This account has been suspended.",
+  awaiting_approval: "This account is awaiting administrator approval.",
 };
 
 export function getOAuthErrorMessage(code: string | null): string | null {
@@ -65,6 +66,7 @@ export function SocialLoginButtons({ className = "", compact = true }: SocialLog
   }, [apiBase]);
 
   const startOAuth = (provider: "google" | "github") => {
+    if (loadState !== "ready" || !providers?.[provider]) return;
     const next =
       typeof window !== "undefined"
         ? new URLSearchParams(window.location.search).get("next")
@@ -80,42 +82,39 @@ export function SocialLoginButtons({ className = "", compact = true }: SocialLog
     ? "flex flex-1 items-center justify-center gap-1.5 rounded-md border border-slate-200/90 bg-white px-2 py-2.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-700/70 dark:bg-slate-900/90 dark:text-slate-200 dark:hover:bg-slate-800"
     : "flex w-full items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-800 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800";
 
-  if (loadState === "loading") {
-    return (
-      <p className={`text-soft text-center text-xs ${className}`}>Checking sign-in options…</p>
-    );
-  }
-
-  if (loadState === "api_down") {
-    return (
-      <p className={`text-soft text-center text-xs leading-relaxed ${className}`}>
-        Cannot reach the API at <code className="text-[0.7rem]">{apiBase}</code>. Start the backend:{" "}
-        <code className="text-[0.7rem]">cd backend &amp;&amp; python run.py</code>
-      </p>
-    );
-  }
-
-  if (loadState === "not_configured" || !providers) {
-    return (
-      <p className={`text-soft text-center text-xs leading-relaxed ${className}`}>
-        Social sign-in is not available. Sign in with email and password, or contact your administrator.
-      </p>
-    );
-  }
+  const disabledClass = "cursor-not-allowed opacity-50 hover:bg-white dark:hover:bg-slate-900";
+  const googleAvailable = loadState === "ready" && Boolean(providers?.google);
+  const githubAvailable = loadState === "ready" && Boolean(providers?.github);
+  const unavailable = loadState === "api_down" || loadState === "not_configured";
 
   return (
-    <div className={`flex gap-2 ${className}`}>
-      {providers.google ? (
-        <button type="button" onClick={() => startOAuth("google")} className={btnClass}>
+    <div className={className}>
+      <div className="flex gap-2">
+        <button
+          type="button"
+          disabled={!googleAvailable}
+          onClick={() => startOAuth("google")}
+          className={`${btnClass} ${!googleAvailable ? disabledClass : ""}`}
+          title={googleAvailable ? "Continue with Google" : "Google sign-in is currently unavailable"}
+        >
           <GoogleIcon />
           {compact ? "Google" : "Continue with Google"}
         </button>
-      ) : null}
-      {providers.github ? (
-        <button type="button" onClick={() => startOAuth("github")} className={btnClass}>
+        <button
+          type="button"
+          disabled={!githubAvailable}
+          onClick={() => startOAuth("github")}
+          className={`${btnClass} ${!githubAvailable ? disabledClass : ""}`}
+          title={githubAvailable ? "Continue with GitHub" : "GitHub sign-in is currently unavailable"}
+        >
           <GitHubIcon />
           {compact ? "GitHub" : "Continue with GitHub"}
         </button>
+      </div>
+      {unavailable ? (
+        <p className="text-soft mt-2 text-center text-xs">
+          Social sign-in is currently unavailable. You can continue with email.
+        </p>
       ) : null}
     </div>
   );

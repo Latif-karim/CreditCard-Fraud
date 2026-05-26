@@ -2,7 +2,8 @@ from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required
 
 from ..extensions import db
-from ..models import Alert, FraudNotification
+from ..models import Alert, FraudNotification, Transaction
+from ..services.rbac import actor_user_id, is_staff
 
 alerts_bp = Blueprint("alerts", __name__, url_prefix="/alerts")
 
@@ -44,7 +45,13 @@ def _seed_if_empty():
 @jwt_required()
 def notifications():
     _seed_if_empty()
-    rows = FraudNotification.query.order_by(FraudNotification.created_at.desc()).limit(100).all()
+    query = FraudNotification.query
+    if not is_staff():
+        uid = actor_user_id()
+        if uid is None:
+            return jsonify({"error": "Invalid session"}), 401
+        query = query.filter(FraudNotification.user_id == uid)
+    rows = query.order_by(FraudNotification.created_at.desc()).limit(100).all()
     return (
         jsonify(
             [
@@ -70,6 +77,8 @@ def mark_read(nid: int):
     n = FraudNotification.query.get(nid)
     if not n:
         return jsonify({"error": "Not found"}), 404
+    if not is_staff() and n.user_id != actor_user_id():
+        return jsonify({"error": "Forbidden"}), 403
     data = request.get_json() or {}
     n.read = bool(data.get("read", True))
     db.session.commit()
@@ -79,7 +88,13 @@ def mark_read(nid: int):
 @alerts_bp.get("/email-log")
 @jwt_required()
 def email_log():
-    rows = Alert.query.order_by(Alert.created_at.desc()).limit(50).all()
+    query = Alert.query
+    if not is_staff():
+        uid = actor_user_id()
+        if uid is None:
+            return jsonify({"error": "Invalid session"}), 401
+        query = query.join(Transaction, Alert.transaction_id == Transaction.id).filter(Transaction.user_id == uid)
+    rows = query.order_by(Alert.created_at.desc()).limit(50).all()
     return (
         jsonify(
             [

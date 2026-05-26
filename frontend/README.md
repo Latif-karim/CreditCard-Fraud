@@ -17,6 +17,7 @@ Starter frontend for a credit card fraud monitoring platform.
 1. Install dependencies:
    - `npm install`
 2. Copy `.env.local.example` to `.env.local`.
+   - Default API: `NEXT_PUBLIC_API_BASE=http://127.0.0.1:5000`
 3. Start dev server:
    - `npm run dev`
 

@@ -22,7 +22,12 @@ def upgrade():
         batch_op.add_column(sa.Column("oauth_subject", sa.String(length=128), nullable=True))
         batch_op.alter_column("password_hash", existing_type=sa.String(length=128), nullable=True)
 
-    op.execute("UPDATE user SET auth_provider = 'email' WHERE auth_provider IS NULL")
+    user_table = sa.table("user", sa.column("auth_provider", sa.String))
+    op.execute(
+        user_table.update()
+        .where(user_table.c.auth_provider.is_(None))
+        .values(auth_provider="email")
+    )
 
 
 def downgrade():

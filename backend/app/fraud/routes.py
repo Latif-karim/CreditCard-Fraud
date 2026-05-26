@@ -16,14 +16,10 @@ fraud_bp = Blueprint("fraud", __name__, url_prefix="/fraud")
 @jwt_required()
 def simulate():
     """Manual transaction simulation for ML showcase (does not persist by default)."""
+    if not is_staff():
+        return jsonify({"error": "Staff role required"}), 403
     data = request.get_json() or {}
-    if is_staff():
-        user_id = int(data.get("user_id", 1))
-    else:
-        uid = actor_user_id()
-        if not uid:
-            return jsonify({"error": "Invalid session"}), 401
-        user_id = uid
+    user_id = int(data.get("user_id", 1))
     amount = float(data.get("amount", 0))
     location = str(data.get("location", "Unknown"))
     persist = bool(data.get("persist", False))
@@ -89,12 +85,43 @@ def explain_transaction(transaction_id: int):
         return jsonify({"error": "Forbidden"}), 403
     decision = FraudDecision.query.filter_by(transaction_id=transaction_id).first()
 
+    if not is_staff():
+        return (
+            jsonify(
+                {
+                    "transaction_id": tx.id,
+                    "status": tx.status,
+                    "customer_status": _customer_status(tx),
+                    "message": _customer_message(tx),
+                }
+            ),
+            200,
+        )
+
     ten_minutes_ago = datetime.utcnow() - timedelta(minutes=10)
     tx_frequency_10m = (
         Transaction.query.filter(
             Transaction.user_id == tx.user_id, Transaction.created_at >= ten_minutes_ago
         ).count()
     )
+
+
+def _customer_status(tx: Transaction) -> str:
+    status = (tx.status or "").lower()
+    if status in ("declined", "blocked", "frozen"):
+        return "Blocked"
+    if status in ("flagged", "disputed", "pending"):
+        return "Under Review"
+    return "Safe"
+
+
+def _customer_message(tx: Transaction) -> str:
+    status = _customer_status(tx)
+    if status == "Blocked":
+        return "This transaction was blocked. Contact support if you recognize it."
+    if status == "Under Review":
+        return "This transaction requires verification. You can request a review if it was not yours."
+    return "This transaction appears safe."
     last_tx = (
         Transaction.query.filter_by(user_id=tx.user_id)
         .filter(Transaction.id != tx.id)

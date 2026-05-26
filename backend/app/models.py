@@ -12,6 +12,7 @@ class User(db.Model):
     role = db.Column(db.String(20), default="user", nullable=False)
     full_name = db.Column(db.String(120), nullable=True)
     is_active = db.Column(db.Boolean, default=True, nullable=False)
+    approved = db.Column(db.Boolean, default=True, nullable=False)
     email_verified = db.Column(db.Boolean, default=False, nullable=False)
     two_factor_enabled = db.Column(db.Boolean, default=False, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
@@ -68,6 +69,24 @@ class Transaction(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
     decision = db.relationship("FraudDecision", backref="transaction", uselist=False)
+
+
+class DisputeCase(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    transaction_id = db.Column(
+        db.Integer, db.ForeignKey("transaction.id"), unique=True, nullable=False
+    )
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    reason = db.Column(db.String(80), nullable=False)
+    status = db.Column(db.String(20), default="open", nullable=False)
+    customer_note = db.Column(db.Text, default="", nullable=False)
+    resolution_note = db.Column(db.Text, default="", nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(
+        db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
+
+    transaction = db.relationship("Transaction", backref="dispute_case", uselist=False)
 
 
 class FraudDecision(db.Model):

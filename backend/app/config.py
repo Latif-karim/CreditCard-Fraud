@@ -20,14 +20,27 @@ except Exception:
     pass
 
 
+def _database_url() -> str:
+    url = os.getenv("DATABASE_URL", "").strip()
+    if not url:
+        return "sqlite:///fraud_detection.db"
+    # Some managed Postgres providers still display the legacy postgres:// scheme.
+    if url.startswith("postgres://"):
+        return url.replace("postgres://", "postgresql://", 1)
+    return url
+
+
 class Config:
     SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret")
     JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "jwt-dev-secret")
     JWT_ACCESS_TOKEN_EXPIRES = timedelta(hours=24)
-    SQLALCHEMY_DATABASE_URI = os.getenv(
-        "DATABASE_URL", "sqlite:///fraud_detection.db"
-    )
+    SQLALCHEMY_DATABASE_URI = _database_url()
+    SQLALCHEMY_ENGINE_OPTIONS = {"pool_pre_ping": True}
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    AUTO_SEED_DEMO_DATA = os.getenv(
+        "AUTO_SEED_DEMO_DATA",
+        "true" if SQLALCHEMY_DATABASE_URI.startswith("sqlite") else "false",
+    ).lower() in ("1", "true", "yes")
     ALERT_EMAIL_FROM = os.getenv("ALERT_EMAIL_FROM", "alerts@example.com")
 
     FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000").rstrip("/")

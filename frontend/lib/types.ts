@@ -33,6 +33,8 @@ export type TransactionRow = {
   risk_score: number;
   confidence: number;
   created_at: string;
+  customer_status?: string;
+  risk_level?: string;
 };
 
 export type PaginatedTransactions = {
@@ -93,12 +95,14 @@ export type FraudSimulateResponse = {
 
 export type ExplainTransactionResponse = {
   transaction_id: number;
-  risk_score: number;
+  risk_score?: number;
   status: string;
-  ml_probability: number;
-  decision_label: string;
-  stored_reasons: string[];
-  feature_importance: { feature: string; contribution: number; direction: string }[];
+  ml_probability?: number;
+  decision_label?: string;
+  stored_reasons?: string[];
+  feature_importance?: { feature: string; contribution: number; direction: string }[];
+  customer_status?: string;
+  message?: string;
 };
 
 export type FraudNotification = {
@@ -117,7 +121,9 @@ export type AdminUser = {
   role: string;
   full_name: string | null;
   is_active: boolean;
+  approved: boolean;
   email_verified: boolean;
+  created_at: string;
 };
 
 export type AdminTransactionRow = {
@@ -143,6 +149,7 @@ export type AdminSystemStats = {
   users: number;
   transactions: number;
   fraud_decisions: number;
+  disputes: number;
   alerts: number;
   notifications: number;
   audit_logs: number;
