@@ -15,7 +15,7 @@ Enterprise-style API for credit card fraud detection: JWT auth (roles **admin**,
 Example:
 
 ```bash
-DATABASE_URL=postgresql://user:password@ep-example-pooler.region.aws.neon.tech/dbname?sslmode=require
+DATABASE_URL=<your-neon-pooled-postgresql-url>
 ```
 
 4. Database migrations:
