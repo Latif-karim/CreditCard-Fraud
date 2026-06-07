@@ -2,6 +2,7 @@
 
 import { motion } from "framer-motion";
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import {
   Activity,
   ArrowRight,
@@ -15,6 +16,8 @@ import {
 import { LandingNav } from "@/components/landing-nav";
 import { LandingTeamCtas } from "@/components/landing-team-ctas";
 import { ProductScreenshot } from "@/components/product-screenshot";
+import { fetchPublic } from "@/lib/api";
+import type { PublicStats } from "@/lib/types";
 
 const fade = {
   initial: { opacity: 0, y: 12 },
@@ -23,7 +26,35 @@ const fade = {
   transition: { duration: 0.68, ease: [0.22, 1, 0.36, 1] },
 };
 
+function formatPercent(rate: number | undefined | null): string {
+  if (rate == null || Number.isNaN(rate)) return "0.00%";
+  return `${(rate * 100).toFixed(2)}%`;
+}
+
+function formatMetric(value: unknown): string {
+  if (value == null) return "—";
+  const n = Number(value);
+  if (Number.isNaN(n)) return String(value);
+  if (n >= 0 && n <= 1) return n.toFixed(3);
+  return n.toFixed(2);
+}
+
 export default function LandingPage() {
+  const [stats, setStats] = useState<PublicStats | null>(null);
+
+  useEffect(() => {
+    void fetchPublic<PublicStats>("/public/stats")
+      .then(setStats)
+      .catch(() => setStats(null));
+  }, []);
+
+  const transactionsLabel = stats ? stats.total_transactions.toLocaleString() : "—";
+  const flaggedRateLabel = stats ? formatPercent(stats.fraud_rate) : "—";
+  const protectedLabel = stats ? `$${Math.round(stats.revenue_protected ?? stats.flagged_volume ?? 0).toLocaleString()}` : "—";
+  const queueLabel = stats ? String(stats.flagged_transactions) : "—";
+  const prAucLabel = stats?.pr_auc != null ? formatMetric(stats.pr_auc) : "—";
+  const precisionLabel = stats?.precision_at_alert != null ? formatPercent(stats.precision_at_alert) : "—";
+
   return (
     <div className="min-h-screen">
       <LandingNav />
@@ -57,21 +88,21 @@ export default function LandingPage() {
               </Link>
             </div>
             <div className="mt-10 grid gap-3 sm:grid-cols-3">
-              <Stat label="Transactions scored" value="1.2M+" />
-              <Stat label="Median latency" value="32ms" />
-              <Stat label="Analyst NPS" value="4.8/5" />
+              <Stat label="Transactions captured" value={transactionsLabel} />
+              <Stat label="Flagged rate" value={flaggedRateLabel} />
+              <Stat label="Active users" value={stats ? String(stats.active_users ?? 0) : "—"} />
             </div>
           </motion.div>
           <motion.div {...fade} className="glass-card relative overflow-hidden p-6">
             <div className="relative space-y-4">
               <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                Live risk snapshot
+                Live platform snapshot
               </p>
               <div className="grid grid-cols-2 gap-3 text-sm">
-                <Mini label="Fraud blocked" value="$12.7M" tone="text-emerald-600 dark:text-emerald-400" />
-                <Mini label="Queue depth" value="38" tone="text-amber-700 dark:text-amber-300" />
-                <Mini label="Model PR-AUC" value="0.91" tone="text-sky-700 dark:text-sky-300" />
-                <Mini label="False positive rate" value="2.1%" tone="text-slate-700 dark:text-slate-200" />
+                <Mini label="Flagged volume" value={protectedLabel} tone="text-emerald-600 dark:text-emerald-400" />
+                <Mini label="Queue depth" value={queueLabel} tone="text-amber-700 dark:text-amber-300" />
+                <Mini label="Model PR-AUC" value={prAucLabel} tone="text-sky-700 dark:text-sky-300" />
+                <Mini label="Alert precision" value={precisionLabel} tone="text-slate-700 dark:text-slate-200" />
               </div>
               <div className="rounded-xl border border-slate-200 bg-white/60 p-4 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-300">
                 <p className="font-semibold text-slate-900 dark:text-white">Explainable alert</p>
@@ -110,13 +141,14 @@ export default function LandingPage() {
 
         <section id="stats" className="mx-auto max-w-6xl px-6 py-16">
           <motion.h2 {...fade} className="text-2xl font-semibold text-slate-900 dark:text-white">
-            Trusted metrics
+            Platform metrics
           </motion.h2>
+          <p className="text-soft mt-2 text-sm">Aggregated from captured transactions and offline model evaluation.</p>
           <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <BigStat value="99.992%" label="Authorization uptime" />
-            <BigStat value="38ms" label="p99 scoring latency" />
-            <BigStat value="120+" label="Risk dimensions tracked" />
-            <BigStat value="SOC2-ready" label="Audit trails & RBAC" />
+            <BigStat value={transactionsLabel} label="Transactions captured" />
+            <BigStat value={flaggedRateLabel} label="Flagged rate" />
+            <BigStat value={prAucLabel} label="Model PR-AUC (offline)" />
+            <BigStat value={stats ? String(stats.enabled_rules ?? 0) : "—"} label="Active fraud rules" />
           </div>
         </section>
 

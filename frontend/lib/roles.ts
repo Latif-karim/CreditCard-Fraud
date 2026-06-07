@@ -23,6 +23,7 @@ export const WORKSPACE_NAV: NavItem[] = [
   { href: "/dashboard/monitoring", label: "Monitoring", roles: ["analyst", "admin"] },
   { href: "/dashboard/capture", label: "Transactions", roles: ["user", "analyst", "admin"] },
   { href: "/dashboard/transactions", label: "Flagged queue", roles: ["analyst", "admin"] },
+  { href: "/dashboard/disputes", label: "Disputes", roles: ["analyst", "admin"] },
   { href: "/dashboard/fraud", label: "Risk analysis", roles: ["analyst", "admin"] },
   { href: "/dashboard/explain", label: "Explainability", roles: ["user", "analyst", "admin"] },
   { href: "/dashboard/analytics", label: "Analytics", roles: ["analyst", "admin"] },

@@ -130,6 +130,7 @@ export function invalidateAfterMutation(path: string): void {
   invalidateApiCache("/dashboard");
   invalidateApiCache("/alerts");
   invalidateApiCache("/transactions");
+  invalidateApiCache("/disputes");
   invalidateApiCache("/admin");
 }
 

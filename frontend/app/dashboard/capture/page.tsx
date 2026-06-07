@@ -109,7 +109,7 @@ export default function CapturePage() {
       return;
     }
     setBusy(true);
-    setMsg("Submitting…");
+    setMsg("Scoring transaction… cloud scoring can take 15–30 seconds.");
     try {
       const body: Record<string, unknown> = {
         amount: Number(amount),
@@ -127,20 +127,22 @@ export default function CapturePage() {
       }
       const res = await postWithAuth<IngestResult>("/transactions/ingest", body, token);
       setLastResult(res);
-      notifyLocal({
-        id: res.transaction_id,
-        amount: Number(amount),
-        location,
-        merchant,
-        country,
-        status: res.status,
-        risk_score: res.risk_score ?? 0,
-        confidence: res.confidence ?? 0,
-      });
+      if (role === "admin" || role === "analyst") {
+        notifyLocal({
+          id: res.transaction_id,
+          amount: Number(amount),
+          location,
+          merchant,
+          country,
+          status: res.status,
+          risk_score: res.risk_score ?? 0,
+          confidence: res.confidence ?? 0,
+        });
+      }
       setMsg(
         role === "user"
-          ? `Transaction #${res.transaction_id} · ${res.customer_status || res.status}`
-          : `Transaction #${res.transaction_id} · risk ${(res.risk_score ?? 0).toFixed(1)} · ${res.status}`
+          ? `Transaction #${res.transaction_id} · ${res.customer_status || res.status} · score ${(res.risk_score ?? 0).toFixed(1)} · ML ${((res.confidence ?? 0) * 100).toFixed(1)}%`
+          : `Transaction #${res.transaction_id} · risk ${(res.risk_score ?? 0).toFixed(1)} · ML ${((res.confidence ?? 0) * 100).toFixed(1)}% · ${res.status}`
       );
     } catch (err) {
       setMsg((err as Error).message);
@@ -188,7 +190,7 @@ export default function CapturePage() {
       return;
     }
     setStreamBusy(true);
-    setMsg("Processing transaction…");
+    setMsg("Processing transaction… cloud scoring can take 15–30 seconds.");
     try {
       const res = await postWithAuth<IngestResult>("/transactions/simulator/tick", {}, token);
       setLastResult(res);
@@ -200,7 +202,9 @@ export default function CapturePage() {
         risk_score: res.risk_score ?? 0,
         confidence: res.confidence ?? 0,
       });
-      setMsg(`Transaction #${res.transaction_id} processed · risk ${(res.risk_score ?? 0).toFixed(1)}`);
+      setMsg(
+        `Transaction #${res.transaction_id} processed · risk ${(res.risk_score ?? 0).toFixed(1)} · ML ${((res.confidence ?? 0) * 100).toFixed(1)}%`
+      );
       await refreshSim();
     } catch (err) {
       setMsg((err as Error).message);
@@ -339,26 +343,26 @@ export default function CapturePage() {
           {msg ? <p className="text-sm text-slate-600 dark:text-slate-300">{msg}</p> : null}
           {lastResult ? (
             <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-3 text-sm dark:border-cyan-400/20">
+              <p className="font-medium text-slate-900 dark:text-white">
+                TX #{lastResult.transaction_id}
+                {role === "user"
+                  ? ` · ${lastResult.customer_status || lastResult.status}`
+                  : ` · ${lastResult.label}`}
+                {" · score "}
+                {(lastResult.risk_score ?? 0).toFixed(1)}
+                {" · ML "}
+                {((lastResult.confidence ?? 0) * 100).toFixed(1)}%
+              </p>
               {role === "user" ? (
-                <>
-                  <p className="font-medium text-slate-900 dark:text-white">
-                    TX #{lastResult.transaction_id} · {lastResult.customer_status || lastResult.status}
-                  </p>
-                  <p className="text-soft mt-2 text-xs">
-                    {lastResult.message || "Transaction submitted for account monitoring."}
-                  </p>
-                </>
+                <p className="text-soft mt-2 text-xs">
+                  {lastResult.message || "Saved to your account history."}
+                </p>
               ) : (
-                <>
-                  <p className="font-medium text-slate-900 dark:text-white">
-                    TX #{lastResult.transaction_id} · {lastResult.label} · score {(lastResult.risk_score ?? 0).toFixed(1)}
-                  </p>
-                  <ul className="text-soft mt-2 list-disc pl-5 text-xs">
-                    {(lastResult.reasons || []).slice(0, 4).map((r, i) => (
-                      <li key={i}>{r}</li>
-                    ))}
-                  </ul>
-                </>
+                <ul className="text-soft mt-2 list-disc pl-5 text-xs">
+                  {(lastResult.reasons || []).slice(0, 4).map((r, i) => (
+                    <li key={i}>{r}</li>
+                  ))}
+                </ul>
               )}
             </div>
           ) : null}

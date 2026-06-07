@@ -45,6 +45,41 @@ type TxNotifyContextValue = {
 
 const TxNotifyContext = createContext<TxNotifyContextValue | null>(null);
 
+const NOTIFIED_STORAGE_KEY = "fd-notified-tx-ids";
+
+function loadNotifiedIds(): Set<number> {
+  if (typeof sessionStorage === "undefined") return new Set();
+  try {
+    const raw = sessionStorage.getItem(NOTIFIED_STORAGE_KEY);
+    if (!raw) return new Set();
+    return new Set(JSON.parse(raw) as number[]);
+  } catch {
+    return new Set();
+  }
+}
+
+function persistNotifiedIds(ids: Set<number>) {
+  if (typeof sessionStorage === "undefined") return;
+  try {
+    sessionStorage.setItem(NOTIFIED_STORAGE_KEY, JSON.stringify([...ids].slice(-300)));
+  } catch {
+    /* ignore */
+  }
+}
+
+function markNotified(id: number) {
+  const next = loadNotifiedIds();
+  next.add(id);
+  persistNotifiedIds(next);
+}
+
+function markNotifiedMany(ids: number[]) {
+  if (!ids.length) return;
+  const next = loadNotifiedIds();
+  ids.forEach((id) => next.add(id));
+  persistNotifiedIds(next);
+}
+
 export function useTransactionNotifications() {
   const ctx = useContext(TxNotifyContext);
   if (!ctx) {
@@ -56,9 +91,9 @@ export function useTransactionNotifications() {
 function showBrowserNotification(tx: TransactionRow, href: string) {
   if (typeof window === "undefined" || !document.hidden) return;
   if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
-  const flagged = tx.status === "flagged" || tx.risk_score >= 60;
+  const flagged = isHighRiskTransaction(tx);
   try {
-    const note = new Notification(flagged ? "Transaction requires verification" : "New transaction", {
+    const note = new Notification(flagged ? "Review this transaction" : "New transaction", {
       body: `TX #${tx.id} · $${tx.amount.toFixed(2)} · ${tx.merchant || tx.location}`,
       tag: `tx-${tx.id}`,
     });
@@ -98,13 +133,16 @@ export function TransactionNotificationProvider({ children }: { children: React.
   const handleNewTransactions = useCallback(
     async (items: TransactionRow[], playSound: boolean) => {
       if (!items.length) return;
+      const notified = loadNotifiedIds();
       let hasHighRisk = false;
       for (const tx of items) {
         if (tx.id > lastIdRef.current) {
           lastIdRef.current = tx.id;
         }
         if (!isHighRiskTransaction(tx)) continue;
+        if (notified.has(tx.id)) continue;
         hasHighRisk = true;
+        markNotified(tx.id);
         pushToast(tx);
         const href =
           role === "analyst" || role === "admin"
@@ -141,7 +179,13 @@ export function TransactionNotificationProvider({ children }: { children: React.
       if (tx.id > lastIdRef.current) {
         lastIdRef.current = tx.id;
       }
-      void playTransactionAlert();
+      markNotified(tx.id);
+      if (!isHighRiskTransaction(tx)) {
+        void playTransactionAlert();
+        pushToast(tx);
+        return;
+      }
+      void playHighRiskWarning();
       pushToast(tx);
     },
     [pushToast]
@@ -151,6 +195,7 @@ export function TransactionNotificationProvider({ children }: { children: React.
     if (id > lastIdRef.current) {
       lastIdRef.current = id;
     }
+    markNotified(id);
   }, []);
 
   useEffect(() => {
@@ -181,6 +226,10 @@ export function TransactionNotificationProvider({ children }: { children: React.
           if (feed.latest_id > lastIdRef.current) {
             lastIdRef.current = feed.latest_id;
           }
+          markNotifiedMany(feed.items.map((tx) => tx.id));
+          if (feed.latest_id > 0) {
+            markNotified(feed.latest_id);
+          }
           return;
         }
 
@@ -188,6 +237,7 @@ export function TransactionNotificationProvider({ children }: { children: React.
           await handleNewTransactions(feed.items, true);
         } else if (feed.latest_id > lastIdRef.current) {
           lastIdRef.current = feed.latest_id;
+          markNotified(feed.latest_id);
         }
       } catch (err) {
         if (err instanceof AuthError) {
@@ -278,7 +328,7 @@ function TransactionToastStack({
           >
             <div className="flex items-start justify-between gap-2">
               <p className="text-xs font-semibold uppercase tracking-wide opacity-80">
-                {high ? "Verification required" : "New transaction"}
+                {high ? "Review this transaction" : "New transaction"}
               </p>
               <button
                 type="button"
@@ -299,10 +349,14 @@ function TransactionToastStack({
             <p className="mt-0.5 text-xs opacity-80">
               {tx.merchant || "Merchant"} · {tx.location}
             </p>
+            {high && role === "user" ? (
+              <p className="mt-2 text-[11px] leading-snug opacity-90">
+                Flagged for review — tap to confirm or dispute.
+              </p>
+            ) : null}
           </Link>
         );
       })}
     </div>
   );
 }
-

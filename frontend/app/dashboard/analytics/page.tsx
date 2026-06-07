@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { BarChart3, MapPinned } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
@@ -14,6 +14,7 @@ import type { LabelValueResponse, LocationStat } from "@/lib/types";
 export default function AnalyticsPage() {
   const [riskDistribution, setRiskDistribution] = useState<LabelValueResponse | null>(null);
   const [locations, setLocations] = useState<LocationStat[]>([]);
+  const [modelMetrics, setModelMetrics] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -22,13 +23,28 @@ export default function AnalyticsPage() {
     Promise.all([
       fetchWithAuth<LabelValueResponse>("/dashboard/risk-distribution", token).catch(() => null),
       fetchWithAuth<LocationStat[]>("/dashboard/top-locations", token).catch(() => [] as LocationStat[]),
+      fetchWithAuth<Record<string, unknown>>("/dashboard/model-metrics", token).catch(() => null),
     ])
-      .then(([risk, locs]) => {
+      .then(([risk, locs, metrics]) => {
         setRiskDistribution(risk);
         setLocations(locs);
+        setModelMetrics(metrics);
       })
       .finally(() => setLoading(false));
   }, []);
+
+  const precisionLabel = useMemo(() => {
+    const p = modelMetrics?.precision_at_alert;
+    if (p == null) return "—";
+    const n = Number(p);
+    return Number.isNaN(n) ? "—" : `${(n * 100).toFixed(1)}%`;
+  }, [modelMetrics]);
+
+  const topCorridor = useMemo(() => {
+    if (!locations.length) return "—";
+    const top = locations[0];
+    return `${top.location} (${top.count} tx)`;
+  }, [locations]);
 
   return (
     <RoleGuard allow={["analyst", "admin"]} title="Analytics">
@@ -42,14 +58,17 @@ export default function AnalyticsPage() {
       ) : (
         <div className="space-y-5">
           <div className="grid gap-4 md:grid-cols-2">
-            <TinyInfo icon={BarChart3} label="Detection Precision" value="96.2%" />
-            <TinyInfo icon={MapPinned} label="Top Risk Corridor" value="London -> Lagos" />
+            <TinyInfo icon={BarChart3} label="Model precision (offline eval)" value={precisionLabel} />
+            <TinyInfo icon={MapPinned} label="Top activity location" value={topCorridor} />
           </div>
           <ScrollReveal placeholderClassName="min-h-[280px]">
-            <RiskDoughnutChart
-              labels={riskDistribution?.labels ?? []}
-              values={riskDistribution?.values ?? []}
-            />
+            {riskDistribution?.labels?.length ? (
+              <RiskDoughnutChart labels={riskDistribution.labels} values={riskDistribution.values} />
+            ) : (
+              <p className="text-soft rounded-xl border border-dashed border-slate-200 px-4 py-8 text-center text-sm dark:border-slate-800">
+                No risk distribution data yet.
+              </p>
+            )}
           </ScrollReveal>
           <div className="glass-card p-4">
             <h3 className="mb-3 text-base font-semibold">Top Transaction Locations</h3>

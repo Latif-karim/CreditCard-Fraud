@@ -1,6 +1,7 @@
 from collections import Counter
 
 from ..models import Transaction, UserProfile
+from ..services.fraud_rules_config import is_rule_enabled
 
 
 def update_user_profile(user_id: int, amount: float, location: str) -> None:
@@ -22,6 +23,9 @@ def update_user_profile(user_id: int, amount: float, location: str) -> None:
 
 
 def evaluate_behavior(user_id: int, amount: float, location: str) -> tuple[float, list[str]]:
+    if not is_rule_enabled("behavior_deviation"):
+        return 0.0, []
+
     score = 0.0
     reasons: list[str] = []
     profile = UserProfile.query.filter_by(user_id=user_id).first()

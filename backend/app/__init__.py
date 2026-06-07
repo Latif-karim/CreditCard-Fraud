@@ -9,9 +9,12 @@ from .auth.oauth_routes import init_oauth, oauth_bp
 from .auth.routes import auth_bp
 from .config import Config
 from .dashboard.routes import dashboard_bp
+from .disputes.routes import disputes_bp
 from .extensions import bcrypt, db, jwt
 from .fraud.routes import fraud_bp
 from .reports.routes import reports_bp
+from .services.cache import get_or_set
+from .services.dashboard_stats import compute_platform_stats
 from .transactions.routes import transactions_bp
 from .users.routes import users_bp
 
@@ -34,6 +37,7 @@ def create_app(config_class=Config):
     app.register_blueprint(auth_bp)
     app.register_blueprint(oauth_bp)
     app.register_blueprint(transactions_bp)
+    app.register_blueprint(disputes_bp)
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(admin_bp)
     app.register_blueprint(alerts_bp)
@@ -44,6 +48,16 @@ def create_app(config_class=Config):
     @app.get("/health")
     def health():
         return jsonify({"status": "ok"}), 200
+
+    @app.get("/public/stats")
+    def public_stats():
+        ttl = float(app.config.get("CACHE_TTL_SECONDS", 30)) if app.config.get("CACHE_ENABLED", True) else 0.0
+
+        def build():
+            return compute_platform_stats()
+
+        payload = get_or_set("public:stats", ttl, build) if ttl > 0 else build()
+        return jsonify(payload), 200
 
     if app.config.get("AUTO_SEED_DEMO_DATA"):
         with app.app_context():

@@ -1,36 +1,25 @@
 """Shared transaction ingest pipeline (manual, simulator, seed)."""
 
-from datetime import datetime, timedelta
-
 from ..extensions import db
-from ..fraud.behavior import update_user_profile
 from ..fraud.engine import evaluate_transaction
-from ..fraud.model import predict_fraud_probability
 from ..models import FraudDecision, FraudNotification, Transaction
 from ..services.alerts import send_email_alert
 from ..services.audit import log_action
 from ..services.cache import invalidate_read_caches
 
 
-def ingest_transaction_data(data: dict, *, actor_user_id: int | None = None) -> dict:
+def ingest_transaction_data(
+    data: dict,
+    *,
+    actor_user_id: int | None = None,
+    quiet: bool = False,
+) -> dict:
     """Score and persist one transaction. Returns API payload."""
     user_id = int(data["user_id"])
     amount = float(data["amount"])
     location = data["location"]
 
     result = evaluate_transaction(user_id=user_id, amount=amount, location=location)
-
-    ten_minutes_ago = datetime.utcnow() - timedelta(minutes=10)
-    tx_frequency_10m = Transaction.query.filter(
-        Transaction.user_id == user_id, Transaction.created_at >= ten_minutes_ago
-    ).count()
-    last_tx = (
-        Transaction.query.filter_by(user_id=user_id).order_by(Transaction.created_at.desc()).first()
-    )
-    minutes_since_last = 9999.0
-    if last_tx:
-        minutes_since_last = (datetime.utcnow() - last_tx.created_at).total_seconds() / 60
-    ml = predict_fraud_probability(amount, tx_frequency_10m, minutes_since_last)
 
     tx = Transaction(
         user_id=user_id,
@@ -44,7 +33,7 @@ def ingest_transaction_data(data: dict, *, actor_user_id: int | None = None) -> 
         ip_address=data.get("ip_address"),
         device_id=data.get("device_id"),
         risk_score=result.final_score,
-        confidence=ml.probability,
+        confidence=result.ml_probability,
         status="flagged" if result.final_score >= 60 else "approved",
     )
     db.session.add(tx)
@@ -55,11 +44,14 @@ def ingest_transaction_data(data: dict, *, actor_user_id: int | None = None) -> 
         rule_score=result.rule_score,
         behavior_score=result.behavior_score,
         ml_score=result.ml_score,
-        ml_probability=ml.probability,
+        ml_probability=result.ml_probability,
         reasons="; ".join(result.reasons) if result.reasons else "No fraud indicators",
         final_label=result.label,
     )
     db.session.add(decision)
+
+    from ..fraud.behavior import update_user_profile
+
     update_user_profile(user_id, amount, location)
 
     if actor_user_id is not None:
@@ -75,7 +67,7 @@ def ingest_transaction_data(data: dict, *, actor_user_id: int | None = None) -> 
             },
         )
 
-    if result.final_score >= 60:
+    if result.final_score >= 60 and not quiet:
         send_email_alert(
             transaction_id=tx.id,
             user_id=user_id,
@@ -99,6 +91,6 @@ def ingest_transaction_data(data: dict, *, actor_user_id: int | None = None) -> 
         "risk_score": result.final_score,
         "label": result.label,
         "status": tx.status,
-        "confidence": ml.probability,
+        "confidence": result.ml_probability,
         "reasons": result.reasons,
     }

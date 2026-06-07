@@ -56,10 +56,11 @@ You can also **register** any role (including Administrator) from `/register`.
 3. **Admin login** — Show user list, toggle a fraud rule, mention model retrain stub.
 4. **Analyst login** — Start **Capture → Live stream** (30s auto transactions); show toast/sound alerts.
 5. **Monitoring** — Filter flagged transactions; approve or flag an item.
-6. **Fraud lab** — Run a synthetic high-risk transaction; discuss fused score.
-7. **Explainability** — Open a transaction ID; walk through feature drivers.
-8. **Reports** — Download CSV and PDF for auditors / examiners.
-9. **Cardholder login** — Show scoped data (only own transactions).
+6. **Disputes** — Resolve a cardholder review request (approve/reject).
+7. **Fraud lab** — Run a synthetic high-risk transaction; discuss fused score.
+8. **Explainability** — Open a transaction ID; walk through feature drivers.
+9. **Reports** — Download CSV and PDF for auditors / examiners.
+10. **Cardholder login** — Show scoped data (only own transactions).
 
 ---
 

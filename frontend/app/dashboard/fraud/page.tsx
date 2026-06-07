@@ -15,6 +15,7 @@ export default function FraudLabPage() {
   const [userId, setUserId] = useState("1");
   const [amount, setAmount] = useState("850");
   const [location, setLocation] = useState("London");
+  const [persist, setPersist] = useState(false);
   const [result, setResult] = useState<FraudSimulateResponse | null>(null);
   const [err, setErr] = useState("");
   const [running, setRunning] = useState(false);
@@ -30,7 +31,7 @@ export default function FraudLabPage() {
           user_id: Number(userId),
           amount: Number(amount),
           location,
-          persist: false,
+          persist,
         },
         token
       );
@@ -69,6 +70,15 @@ export default function FraudLabPage() {
             value={location}
             onChange={(e) => setLocation(e.target.value)}
           />
+          <label className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
+            <input
+              type="checkbox"
+              checked={persist}
+              onChange={(e) => setPersist(e.target.checked)}
+              className="rounded border-slate-300"
+            />
+            Save to database (off = score only, no row created)
+          </label>
           <button
             type="button"
             onClick={() => void run()}
@@ -105,6 +115,15 @@ export default function FraudLabPage() {
                   <p className="text-2xl font-semibold capitalize">{result.label}</p>
                 </div>
               </div>
+              {result.persisted && result.transaction_id ? (
+                <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200">
+                  Saved as transaction #{result.transaction_id} ({result.status}).
+                </p>
+              ) : (
+                <p className="text-soft text-xs">
+                  Simulation only — enable “Save to database” to create a transaction row.
+                </p>
+              )}
               <div className="glass-card p-4">
                 <h3 className="mb-2 text-sm font-semibold">Narrative</h3>
                 <p className="text-sm leading-relaxed text-slate-700 dark:text-slate-200">{result.narrative}</p>

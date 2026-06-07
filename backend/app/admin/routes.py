@@ -10,6 +10,7 @@ from ..services.admin_maintenance import (
     purge_all_transaction_data,
 )
 from ..services.audit import log_action
+from ..services.cache import invalidate_read_caches
 from ..services.rbac import is_admin
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
@@ -143,6 +144,7 @@ def toggle_rule(rule_id: int):
     if "enabled" in data:
         rule.enabled = bool(data["enabled"])
     db.session.commit()
+    invalidate_read_caches()
     return jsonify({"id": rule.id, "enabled": rule.enabled}), 200
 
 
@@ -277,6 +279,31 @@ def purge_transactions():
     )
     db.session.commit()
     return jsonify({"message": "All transaction data removed", **result}), 200
+
+
+@admin_bp.post("/data/reseed-realistic")
+@jwt_required()
+def reseed_realistic():
+    if not _admin():
+        return jsonify({"error": "Admin only"}), 403
+
+    min_count = int((request.get_json() or {}).get("min_transactions", 80))
+    min_count = max(20, min(500, min_count))
+
+    from ..services.seed_data import reseed_realistic_demo_data
+
+    actor_id = int(get_jwt_identity())
+    result = reseed_realistic_demo_data(min_transactions=min_count)
+    log_action(
+        actor_id,
+        "admin_reseed_realistic",
+        "system",
+        "transactions",
+        result,
+    )
+    db.session.commit()
+    invalidate_read_caches()
+    return jsonify({"message": "Realistic demo dataset loaded", **result}), 200
 
 
 @admin_bp.post("/models/retrain")

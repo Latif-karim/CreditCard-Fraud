@@ -82,6 +82,41 @@ function dashboardHasCache(token: string): boolean {
   return peekApiCache("/dashboard/overview", token) !== null;
 }
 
+function formatMetric(value: unknown): string {
+  if (value == null) return "—";
+  const n = Number(value);
+  if (Number.isNaN(n)) return String(value);
+  if (n >= 0 && n <= 1) return n.toFixed(3);
+  return n.toFixed(2);
+}
+
+function formatPercent(rate: number | undefined | null): string {
+  if (rate == null || Number.isNaN(rate)) return "0.00%";
+  return `${(rate * 100).toFixed(2)}%`;
+}
+
+const EMPTY_OVERVIEW: DashboardOverview = {
+  total_transactions: 0,
+  flagged_transactions: 0,
+  disputed_transactions: 0,
+  approved_transactions: 0,
+  under_review_transactions: 0,
+  fraud_rate: 0,
+  review_rate: 0,
+  total_volume: 0,
+  flagged_volume: 0,
+  active_users: 0,
+  revenue_protected: 0,
+};
+
+function EmptyPanel({ message }: { message: string }) {
+  return (
+    <p className="text-soft rounded-xl border border-dashed border-slate-200 px-4 py-8 text-center text-sm dark:border-slate-800">
+      {message}
+    </p>
+  );
+}
+
 export default function DashboardPage() {
   const router = useRouter();
   const hydrated = useHydrated();
@@ -206,97 +241,36 @@ export default function DashboardPage() {
     void load();
   }, [hydrated, isStaff, role]);
 
-  const view = overview ?? {
-    total_transactions: 124302,
-    flagged_transactions: 3912,
-    approved_transactions: 120390,
-    fraud_rate: 0.031,
-    total_volume: 1293300,
-    active_users: 8420,
-    revenue_protected: 920000,
-  };
-  const customerView = overview ?? {
-    total_transactions: 0,
-    flagged_transactions: 0,
-    approved_transactions: 0,
-    fraud_rate: 0,
-    total_volume: 0,
-    active_users: 1,
-    revenue_protected: 0,
-  };
+  const view = overview ?? EMPTY_OVERVIEW;
+  const customerView = overview ?? EMPTY_OVERVIEW;
+  const underReviewCount =
+    customerView.under_review_transactions ?? customerView.flagged_transactions ?? 0;
 
-  const trendView = trends ?? {
-    labels: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
-    fraud_series: [18, 22, 20, 29, 25, 31, 27],
-    legit_series: [1020, 1110, 1090, 1215, 1250, 1302, 1278],
-  };
+  const hasTrendData = Boolean(trends?.labels?.length);
+  const hasRegionData = Boolean(region?.labels?.length);
+  const hasCardData = Boolean(cardType?.labels?.length);
+  const hasHeatmapData = Boolean(heatmap?.cells?.length);
 
-  const flaggedView =
-    flagged.length > 0
-      ? flagged
-      : [
-          { id: 9021, user_id: 42, amount: 980.5, location: "Accra", risk_score: 87.1, created_at: "" },
-          { id: 9022, user_id: 88, amount: 2400, location: "Lagos", risk_score: 91.4, created_at: "" },
-          { id: 9023, user_id: 23, amount: 620.5, location: "London", risk_score: 74.8, created_at: "" },
-        ];
-
-  const logsView =
-    auditLogs.length > 0
-      ? auditLogs
-      : [
-          {
-            id: 1,
-            actor_user_id: 1,
-            action: "transaction_ingested",
-            entity: "transaction",
-            entity_id: "9021",
-            details: "Flagged by rule+ml",
-            created_at: "just now",
-          },
-          {
-            id: 2,
-            actor_user_id: 1,
-            action: "alert_sent",
-            entity: "alert",
-            entity_id: "301",
-            details: "Email dispatched",
-            created_at: "3m ago",
-          },
-          {
-            id: 3,
-            actor_user_id: 2,
-            action: "reviewed_transaction",
-            entity: "transaction",
-            entity_id: "8954",
-            details: "Marked suspicious",
-            created_at: "11m ago",
-          },
-        ];
-
-  const regionView = region ?? { labels: ["UK", "US", "DE", "GH"], values: [120, 98, 76, 64] };
-  const cardView = cardType ?? { labels: ["Visa", "Mastercard", "Amex"], values: [45, 32, 12] };
-  const heatmapView = heatmap ?? {
-    cells: [
-      { country: "UK", category: "travel", intensity: 72 },
-      { country: "US", category: "electronics", intensity: 58 },
-      { country: "GH", category: "cash", intensity: 81 },
-      { country: "DE", category: "groceries", intensity: 34 },
-    ],
-  };
-  const recentView =
-    recent.length > 0
-      ? recent
-      : [
-          { id: 1, amount: 420, status: "flagged", confidence: 0.82, created_at: "", location: "London" },
-          { id: 2, amount: 89, status: "approved", confidence: 0.12, created_at: "", location: "Berlin" },
-        ];
-  const liveView =
-    live.length > 0
-      ? live
-      : [
-          { title: "Suspicious transaction detected", detail: "Velocity threshold exceeded", time: "2 min ago" },
-          { title: "User login from new device", detail: "New fingerprint + ASN", time: "8 min ago" },
-        ];
+  const enabledRules = view.enabled_rules ?? 0;
+  const totalRules = view.total_rules ?? 0;
+  const activeAnalysts = view.active_analysts ?? 0;
+  const ruleEngineValue =
+    totalRules === 0
+      ? "No rules configured"
+      : enabledRules === totalRules
+        ? `${enabledRules} rules active`
+        : `${enabledRules}/${totalRules} rules active`;
+  const ruleEngineClass =
+    totalRules > 0 && enabledRules > 0
+      ? "text-emerald-600 dark:text-success"
+      : "text-amber-600 dark:text-warning";
+  const driftValue = modelMetrics?.last_trained
+    ? `Last trained ${String(modelMetrics.last_trained)}`
+    : "Offline evaluation only";
+  const staffingValue =
+    view.flagged_transactions === 0
+      ? `${activeAnalysts} staff · queue clear`
+      : `${activeAnalysts} staff · ${view.flagged_transactions} flagged`;
 
   const submitDispute = async (txId: number, reason: "not_mine" | "request_review") => {
     const token = localStorage.getItem("access_token") || "";
@@ -375,8 +349,8 @@ export default function DashboardPage() {
             <KpiCard
               icon={ShieldAlert}
               title="Under review"
-              value={Number(customerView.flagged_transactions).toLocaleString()}
-              subtitle="Needs verification"
+              value={Number(underReviewCount).toLocaleString()}
+              subtitle={`${formatPercent(customerView.review_rate ?? 0)} of your activity`}
               tone="warning"
             />
             <KpiCard
@@ -507,12 +481,14 @@ export default function DashboardPage() {
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
               <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
             </span>
-            Live · Fraud rate {(view.fraud_rate * 100).toFixed(2)}%
+            Live · Flagged rate {formatPercent(view.fraud_rate)}
+            {view.total_transactions > 0 ? ` · ${view.total_transactions.toLocaleString()} captured` : ""}
           </span>
           {modelMetrics ? (
             <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white/80 px-3 py-1 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-900/80 dark:text-slate-300">
               <Activity className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
-              PR-AUC {String(modelMetrics.pr_auc)} · Recall {String(modelMetrics.recall_fraud)}
+              PR-AUC {formatMetric(modelMetrics.pr_auc)} · Recall {formatMetric(modelMetrics.recall_fraud)}
+              {modelMetrics.artifact_present === false ? " · bootstrap needed" : ""}
             </span>
           ) : null}
         </div>
@@ -535,17 +511,17 @@ export default function DashboardPage() {
           />
           <KpiCard
             icon={Percent}
-            title="Fraud rate"
-            value={`${(view.fraud_rate * 100).toFixed(2)}%`}
+            title="Flagged rate"
+            value={formatPercent(view.fraud_rate)}
             tone="warning"
-            subtitle="Of all events"
+            subtitle={`${view.flagged_transactions} of ${view.total_transactions} captured`}
           />
           <KpiCard
             icon={ShieldCheck}
-            title="Revenue protected"
-            value={`$${Math.round(view.revenue_protected ?? 0).toLocaleString()}`}
+            title="Flagged volume"
+            value={`$${Math.round(view.flagged_volume ?? view.revenue_protected ?? 0).toLocaleString()}`}
             tone="success"
-            subtitle="Estimated blocked exposure"
+            subtitle="Sum of suspicious amounts"
           />
           <KpiCard
             icon={Users}
@@ -573,31 +549,47 @@ export default function DashboardPage() {
             href={queueHref}
           />
           <MetricPill icon={CheckCircle2} label="Auto-approved" value={String(view.approved_transactions)} tone="emerald" />
-          <MetricPill icon={Clock} label="Decision latency" value="32 ms" tone="violet" />
+          <MetricPill icon={Clock} label="Under review" value={String(view.under_review_transactions ?? 0)} tone="violet" />
         </div>
 
         <ScrollReveal placeholderClassName="min-h-[300px]">
-          <FraudLineChart labels={trendView.labels} fraudSeries={trendView.fraud_series} legitSeries={trendView.legit_series} />
+          {hasTrendData && trends ? (
+            <FraudLineChart labels={trends.labels} fraudSeries={trends.fraud_series} legitSeries={trends.legit_series} />
+          ) : (
+            <EmptyPanel message="No trend data yet. Capture transactions to populate this chart." />
+          )}
         </ScrollReveal>
 
         <div className="grid gap-4 lg:grid-cols-2">
           <ScrollReveal placeholderClassName="min-h-[260px]">
-            <SimpleBarChart title="Fraud by region" labels={regionView.labels} values={regionView.values} horizontal />
+            {hasRegionData && region ? (
+              <SimpleBarChart title="Fraud by region" labels={region.labels} values={region.values} horizontal />
+            ) : (
+              <EmptyPanel message="No regional fraud breakdown yet." />
+            )}
           </ScrollReveal>
           <ScrollReveal placeholderClassName="min-h-[260px]">
-            <SimpleBarChart title="Fraud by card type" labels={cardView.labels} values={cardView.values} />
+            {hasCardData && cardType ? (
+              <SimpleBarChart title="Fraud by card type" labels={cardType.labels} values={cardType.values} />
+            ) : (
+              <EmptyPanel message="No card-type fraud breakdown yet." />
+            )}
           </ScrollReveal>
         </div>
 
         <ScrollReveal placeholderClassName="min-h-[200px]">
-          <RiskHeatmap cells={heatmapView.cells} />
+          {hasHeatmapData && heatmap ? (
+            <RiskHeatmap cells={heatmap.cells} />
+          ) : (
+            <EmptyPanel message="No risk concentration data yet." />
+          )}
         </ScrollReveal>
 
         <div className="grid gap-4 lg:grid-cols-2">
           <div className="glass-card flex max-h-[min(22rem,40vh)] flex-col p-4">
             <PanelTitle icon={Radio} title="Live activity" />
             <ul className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain pr-1 text-sm">
-              {liveView.map((item, idx) => (
+              {live.map((item, idx) => (
                 <li
                   key={`${item.title}-${idx}`}
                   className="flex gap-3 rounded-xl border border-slate-200/90 bg-white/50 px-3 py-2.5 dark:border-slate-800 dark:bg-slate-950/40"
@@ -612,13 +604,14 @@ export default function DashboardPage() {
                   </div>
                 </li>
               ))}
+              {!live.length ? <EmptyPanel message="No audit or account activity recorded yet." /> : null}
             </ul>
           </div>
           <div id="alert-feed" className="glass-card flex max-h-[min(22rem,40vh)] scroll-mt-4 flex-col p-4">
             <PanelTitle icon={Bell} title="Alert feed" />
             <p className="text-soft -mt-2 mb-3 shrink-0 text-xs">Click a transaction to view details and explanation.</p>
             <div className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain pr-1">
-              {flaggedView.map((tx) => (
+              {flagged.map((tx) => (
                 <Link
                   key={tx.id}
                   href={transactionDetailHref(tx.id)}
@@ -645,6 +638,7 @@ export default function DashboardPage() {
                   </div>
                 </Link>
               ))}
+              {!flagged.length ? <EmptyPanel message="No flagged transactions in the queue." /> : null}
             </div>
           </div>
         </div>
@@ -665,7 +659,7 @@ export default function DashboardPage() {
                 </tr>
               </thead>
               <tbody>
-                {recentView.map((tx) => (
+                {recent.map((tx) => (
                   <tr
                     key={tx.id}
                     role="button"
@@ -691,6 +685,7 @@ export default function DashboardPage() {
                 ))}
               </tbody>
             </table>
+            {!recent.length ? <EmptyPanel message="No transactions captured yet." /> : null}
           </div>
         </div>
 
@@ -698,19 +693,21 @@ export default function DashboardPage() {
           <div className="glass-card p-4">
             <PanelTitle icon={ShieldCheck} title="Rule & model health" />
             <div className="grid gap-2 text-sm">
-              <HealthRow icon={CheckCircle2} label="Rule engine" value="Healthy" valueClass="text-emerald-600 dark:text-success" />
+              <HealthRow icon={CheckCircle2} label="Rule engine" value={ruleEngineValue} valueClass={ruleEngineClass} />
               <HealthRow
                 icon={Activity}
                 label="ML model"
                 value={
                   modelMetrics?.pr_auc != null
-                    ? `Active · PR-AUC ${String(modelMetrics.pr_auc)}`
-                    : "Active"
+                    ? `Active · PR-AUC ${formatMetric(modelMetrics.pr_auc)}`
+                    : modelMetrics?.artifact_present === false
+                      ? "Fallback heuristic (train model)"
+                      : "Active"
                 }
                 valueClass="text-emerald-600 dark:text-success"
               />
-              <HealthRow icon={ShieldAlert} label="Drift monitor" value="Low drift" valueClass="text-amber-600 dark:text-warning" />
-              <HealthRow icon={Users} label="Analyst staffing" value="Within SLA" valueClass="text-emerald-600 dark:text-success" />
+              <HealthRow icon={ShieldAlert} label="Model drift" value={driftValue} valueClass="text-amber-600 dark:text-warning" />
+              <HealthRow icon={Users} label="Analyst queue" value={staffingValue} valueClass="text-emerald-600 dark:text-success" />
             </div>
           </div>
           {isStaff ? (
@@ -726,7 +723,7 @@ export default function DashboardPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {logsView.map((row) => (
+                  {auditLogs.map((row) => (
                     <tr key={row.id} className="border-b border-slate-100 last:border-0 dark:border-slate-800">
                       <td className="py-2">{formatAuditAction(row.action)}</td>
                       <td className="py-2">
@@ -738,6 +735,7 @@ export default function DashboardPage() {
                 </tbody>
               </table>
             </div>
+            {!auditLogs.length ? <EmptyPanel message="No audit events recorded yet." /> : null}
           </div>
           ) : null}
         </div>

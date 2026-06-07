@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronRight, Clock3, ShieldAlert } from "lucide-react";
 
@@ -9,21 +9,30 @@ import { RoleGuard } from "@/components/role-guard";
 import { CardGridSkeleton, TableSkeleton } from "@/components/skeletons";
 import { fetchWithAuth } from "@/lib/api";
 import { monitoringHref, transactionDetailHref } from "@/lib/transaction-links";
-import type { FlaggedTransaction } from "@/lib/types";
+import type { DashboardOverview, FlaggedTransaction } from "@/lib/types";
 
 export default function TransactionsPage() {
   const router = useRouter();
   const [transactions, setTransactions] = useState<FlaggedTransaction[]>([]);
+  const [overview, setOverview] = useState<DashboardOverview | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const token = localStorage.getItem("access_token") || "";
     setLoading(true);
-    fetchWithAuth<FlaggedTransaction[]>("/transactions/flagged", token)
-      .then(setTransactions)
-      .catch(() => setTransactions([]))
+    Promise.all([
+      fetchWithAuth<FlaggedTransaction[]>("/transactions/flagged", token).catch(() => []),
+      fetchWithAuth<DashboardOverview>("/dashboard/overview", token).catch(() => null),
+    ])
+      .then(([txs, stats]) => {
+        setTransactions(txs);
+        setOverview(stats);
+      })
       .finally(() => setLoading(false));
   }, []);
+
+  const openCases = transactions.length;
+  const flaggedRate = overview?.fraud_rate ?? 0;
 
   return (
     <RoleGuard allow={["analyst", "admin"]} title="Flagged queue">
@@ -36,9 +45,17 @@ export default function TransactionsPage() {
       ) : (
       <div className="space-y-5">
         <div className="grid gap-4 md:grid-cols-3">
-          <InfoTile label="Open Cases" value="38" icon={ShieldAlert} />
-          <InfoTile label="Avg Review Time" value="14 min" icon={Clock3} />
-          <InfoTile label="Escalation Rate" value="7.2%" icon={Clock3} />
+          <InfoTile label="Open cases" value={String(openCases)} icon={ShieldAlert} />
+          <InfoTile
+            label="Flagged rate"
+            value={`${(flaggedRate * 100).toFixed(2)}%`}
+            icon={Clock3}
+          />
+          <InfoTile
+            label="Captured transactions"
+            value={String(overview?.total_transactions ?? 0)}
+            icon={Clock3}
+          />
         </div>
         <div className="glass-card p-4">
           <p className="text-soft mb-3 text-xs">Click a row for explainability, or open full monitoring.</p>

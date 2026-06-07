@@ -1,34 +1,34 @@
 {
-  "selected_model": "logreg_undersample",
+  "selected_model": "rf_smote",
   "selection_strategy": "highest recall, tie-break by average_precision",
   "results": [
     {
       "name": "rf_smote",
-      "average_precision": 0.02241333737114107,
-      "recall": 0.4146341463414634,
-      "precision": 0.006495160468670403,
-      "f1": 0.012789968652037617
-    },
-    {
-      "name": "logreg_undersample",
-      "average_precision": 0.0029766660195528483,
-      "recall": 0.5447154471544715,
-      "precision": 0.0020557822711791598,
-      "f1": 0.004096105642844042
-    },
-    {
-      "name": "logreg_smote",
-      "average_precision": 0.002916923247450136,
-      "recall": 0.3983739837398374,
-      "precision": 0.0025135939263363086,
-      "f1": 0.004995667023500025
+      "average_precision": 0.5075948375784506,
+      "recall": 0.8666666666666667,
+      "precision": 0.040123456790123455,
+      "f1": 0.07669616519174041
     },
     {
       "name": "logreg_baseline",
-      "average_precision": 0.0028835023871850826,
-      "recall": 0.3902439024390244,
-      "precision": 0.0027696036004846805,
-      "f1": 0.005500171880371262
+      "average_precision": 0.4611291563560914,
+      "recall": 0.8,
+      "precision": 0.029556650246305417,
+      "f1": 0.057007125890736345
+    },
+    {
+      "name": "logreg_smote",
+      "average_precision": 0.4569098085583963,
+      "recall": 0.8,
+      "precision": 0.029850746268656716,
+      "f1": 0.05755395683453238
+    },
+    {
+      "name": "logreg_undersample",
+      "average_precision": 0.4518815895850711,
+      "recall": 0.8,
+      "precision": 0.03225806451612903,
+      "f1": 0.06201550387596899
     }
   ]
 }

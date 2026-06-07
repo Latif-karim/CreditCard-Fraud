@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Cpu, Database, ShieldCheck, Trash2, Users, XCircle } from "lucide-react";
+import { Cpu, Database, RefreshCw, ShieldCheck, Trash2, Users, XCircle } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
 import { RoleGuard } from "@/components/role-guard";
@@ -30,6 +30,7 @@ export default function AdminPage() {
   const [txData, setTxData] = useState<AdminTransactionsPage | null>(null);
   const [txPage, setTxPage] = useState(1);
   const [deleteTxId, setDeleteTxId] = useState("");
+  const [reseedCount, setReseedCount] = useState("80");
 
   const token = () => localStorage.getItem("access_token") || "";
 
@@ -191,6 +192,50 @@ export default function AdminPage() {
     }
   };
 
+  const reseedRealistic = async () => {
+    const min = Math.max(20, Math.min(500, Number(reseedCount) || 80));
+    if (
+      !window.confirm(
+        `Replace all transaction data with ${min} realistic demo transactions (~4% flagged)? User accounts are kept.`
+      )
+    ) {
+      return;
+    }
+
+    setBusy("reseed");
+    setErr("");
+    setOk("");
+    try {
+      const res = await postWithAuth<{
+        message: string;
+        transaction_total: number;
+        transactions_added: number;
+        flagged_transactions: number;
+        flagged_rate: number;
+      }>("/admin/data/reseed-realistic", { min_transactions: min }, token());
+
+      if (!res.transactions_added || !res.transaction_total) {
+        setErr("Reseed finished but no transactions were saved. Check backend logs and try again.");
+        return;
+      }
+
+      const [s, txRes] = await Promise.all([
+        fetchWithAuth<AdminSystemStats>("/admin/system/stats", token()),
+        fetchWithAuth<AdminTransactionsPage>("/admin/transactions?page=1&per_page=25", token()),
+      ]);
+      setStats(s);
+      setTxData(txRes);
+      setTxPage(1);
+      setOk(
+        `${res.message}: ${res.transaction_total} transactions, ${res.flagged_transactions} flagged (${(res.flagged_rate * 100).toFixed(1)}%).`
+      );
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const toggleRule = async (id: number, enabled: boolean) => {
     try {
       await patchWithAuth(`/admin/rules/${id}`, { enabled }, token());
@@ -329,6 +374,36 @@ export default function AdminPage() {
                   ))}
                 </div>
               ) : null}
+              <div className="mb-6 rounded-xl border border-sky-200 bg-sky-50/60 p-4 dark:border-sky-900 dark:bg-sky-950/30">
+                <p className="text-sm font-medium text-slate-900 dark:text-white">Reseed realistic demo data</p>
+                <p className="text-soft mt-1 text-xs leading-relaxed">
+                  Clears all transactions and loads spread-out historical activity with a typical ~4% flagged rate.
+                  Use this if dashboard KPIs look inflated from old bulk seeding. On Neon/cloud Postgres this can
+                  take 1–2 minutes — keep the page open until you see a success or error message.
+                </p>
+                <div className="mt-3 flex flex-wrap items-end gap-3">
+                  <label className="text-soft block text-xs">
+                    Transaction count
+                    <input
+                      className="input-fintech mt-1 w-28"
+                      type="number"
+                      min={20}
+                      max={500}
+                      value={reseedCount}
+                      onChange={(e) => setReseedCount(e.target.value)}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    disabled={busy !== null}
+                    onClick={() => void reseedRealistic()}
+                    className="inline-flex items-center gap-2 rounded-lg bg-sky-700 px-4 py-2 text-sm font-medium text-white hover:bg-sky-800 disabled:opacity-50 dark:bg-sky-600 dark:hover:bg-sky-500"
+                  >
+                    <RefreshCw className={`h-4 w-4 ${busy === "reseed" ? "animate-spin" : ""}`} />
+                    {busy === "reseed" ? "Reseeding…" : "Reseed realistic demo data"}
+                  </button>
+                </div>
+              </div>
               <p className="text-soft mb-3 text-xs leading-relaxed">
                 Remove all transaction history, fraud scores, alerts, and in-app notifications. User accounts,
                 fraud rules, and audit logs are preserved.

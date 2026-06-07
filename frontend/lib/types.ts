@@ -1,11 +1,27 @@
 export type DashboardOverview = {
   total_transactions: number;
   flagged_transactions: number;
+  disputed_transactions?: number;
   approved_transactions: number;
+  under_review_transactions?: number;
   fraud_rate: number;
+  review_rate?: number;
   total_volume: number;
+  flagged_volume?: number;
   active_users?: number;
   revenue_protected?: number;
+  scope?: string;
+  enabled_rules?: number;
+  total_rules?: number;
+  active_analysts?: number;
+};
+
+export type PublicStats = DashboardOverview & {
+  pr_auc?: number | null;
+  recall_fraud?: number | null;
+  precision_at_alert?: number | null;
+  artifact_present?: boolean;
+  last_trained?: string | null;
 };
 
 export type FlaggedTransaction = {
@@ -91,6 +107,9 @@ export type FraudSimulateResponse = {
   narrative: string;
   feature_importance: { feature: string; contribution: number; direction: string }[];
   scores: { rules: number; behavior: number; ml: number };
+  persisted?: boolean;
+  transaction_id?: number;
+  status?: string;
 };
 
 export type ExplainTransactionResponse = {
@@ -114,6 +133,28 @@ export type FraudNotification = {
   read: boolean;
   created_at: string;
   transaction_id?: number | null;
+};
+
+export type DisputeCaseRow = {
+  id: number;
+  transaction_id: number;
+  user_id: number;
+  user_email: string | null;
+  reason: string;
+  status: string;
+  customer_note: string;
+  resolution_note: string;
+  created_at: string;
+  updated_at: string;
+  transaction: {
+    id: number;
+    amount: number;
+    merchant: string | null;
+    location: string;
+    status: string;
+    risk_score: number;
+    created_at: string;
+  } | null;
 };
 
 export type AdminUser = {

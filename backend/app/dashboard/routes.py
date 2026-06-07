@@ -2,8 +2,10 @@ from flask import Blueprint, current_app, jsonify
 from flask_jwt_extended import jwt_required
 from sqlalchemy import case, func
 
-from ..models import AuditLog, FraudDecision, FraudRule, Transaction, User
+from ..models import AuditLog, FraudDecision, FraudRule, Transaction
 from ..services.cache import get_or_set, scoped_key
+from ..services.dashboard_stats import compute_overview_stats
+from ..services.model_metrics import load_model_metrics_payload
 from ..services.rbac import actor_user_id, current_role, is_admin, is_cardholder, is_staff, scope_transactions
 
 dashboard_bp = Blueprint("dashboard", __name__, url_prefix="/dashboard")
@@ -41,31 +43,9 @@ def overview():
     ttl = _cache_ttl()
 
     def build():
-        base = scope_transactions(Transaction.query)
-        total = base.count()
-        flagged = base.filter(Transaction.status == "flagged").count()
-        approved = base.filter(Transaction.status == "approved").count()
-        total_volume = db_safe_scalar(
-            base.with_entities(func.coalesce(func.sum(Transaction.amount), 0.0))
-        )
-        active_users = User.query.filter_by(is_active=True).count()
-        fraud_value = db_safe_scalar(
-            base.with_entities(func.coalesce(func.sum(Transaction.amount), 0.0)).filter(
-                Transaction.status == "flagged"
-            )
-        )
-        return {
-            "total_transactions": total,
-            "flagged_transactions": flagged,
-            "approved_transactions": approved,
-            "fraud_rate": (flagged / total) if total else 0,
-            "total_volume": total_volume,
-            "active_users": active_users if is_staff() else 1,
-            "revenue_protected": round(fraud_value * 0.62, 2),
-            "scope": "personal" if is_cardholder() else "global",
-        }
+        return compute_overview_stats()
 
-    payload = _cached(scoped_key("dashboard", "overview", role, uid), ttl, build)
+    payload = _cached(scoped_key("dashboard", "overview-v2", role, uid), ttl, build)
     return jsonify(payload), 200
 
 
@@ -213,7 +193,7 @@ def fraud_by_card():
             .all()
         )
         if not rows:
-            return {"labels": ["Visa", "Mastercard", "Amex", "Other"], "values": [12, 9, 4, 3]}
+            return {"labels": [], "values": []}
         return {"labels": [r[0] or "unknown" for r in rows], "values": [int(r[1]) for r in rows]}
 
     payload = _cached(scoped_key("dashboard", "fraud-by-card", role), ttl, build)
@@ -284,21 +264,6 @@ def live_activity():
                     "time": log.created_at.isoformat(),
                 }
             )
-        if len(feed) < 5:
-            feed.extend(
-                [
-                    {
-                        "title": "Suspicious transaction detected",
-                        "detail": "Velocity threshold exceeded for user 302",
-                        "time": "2 min ago",
-                    },
-                    {
-                        "title": "User login from new device",
-                        "detail": "Chrome on Windows from new IP",
-                        "time": "8 min ago",
-                    },
-                ]
-            )
         return feed
 
     payload = _cached(scoped_key("dashboard", "live-activity", role, uid), ttl, build)
@@ -326,12 +291,6 @@ def heatmap():
             {"country": r[0] or "?", "category": r[1] or "general", "intensity": round(float(r[2] or 0), 1)}
             for r in rows
         ]
-        if len(cells) < 6:
-            cells = [
-                {"country": "UK", "category": "travel", "intensity": 72},
-                {"country": "US", "category": "electronics", "intensity": 58},
-                {"country": "GH", "category": "cash", "intensity": 81},
-            ]
         return {"cells": cells}
 
     payload = _cached(scoped_key("dashboard", "heatmap", role), ttl, build)
@@ -347,13 +306,7 @@ def model_metrics():
     ttl = _cache_ttl()
 
     def build():
-        return {
-            "pr_auc": 0.91,
-            "recall_fraud": 0.84,
-            "precision_at_alert": 0.38,
-            "last_trained": "2026-05-09",
-            "notes": "Illustrative metrics; replace with evaluation pipeline output.",
-        }
+        return load_model_metrics_payload()
 
     payload = _cached(scoped_key("dashboard", "model-metrics", role), ttl, build)
     return jsonify(payload), 200

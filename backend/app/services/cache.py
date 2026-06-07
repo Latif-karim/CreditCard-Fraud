@@ -74,3 +74,4 @@ def invalidate_read_caches(user_id: int | None = None) -> None:
     invalidate_dashboard_cache()
     invalidate_alerts_cache(user_id)
     cache_invalidate_prefix("transactions:")
+    cache_delete("public:stats")

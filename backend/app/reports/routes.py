@@ -7,21 +7,16 @@ from flask import Blueprint, Response, jsonify
 from flask_jwt_extended import jwt_required
 
 from ..models import AuditLog, Transaction
+from ..services.dashboard_stats import compute_overview_stats
 from ..services.rbac import is_staff, scope_transactions
-from ..services.seed_data import seed_all, seed_transactions_if_needed
+from ..services.seed_data import seed_all
 
 reports_bp = Blueprint("reports", __name__, url_prefix="/reports")
-
-
-def _ensure_report_data() -> int:
-    """Guarantee CSV/PDF exports are non-empty for demos."""
-    return seed_transactions_if_needed(min_count=80)
 
 
 @reports_bp.get("/transactions.csv")
 @jwt_required()
 def export_transactions_csv():
-    _ensure_report_data()
     rows = scope_transactions(Transaction.query).order_by(Transaction.created_at.desc()).limit(5000).all()
     buf = io.StringIO()
     # UTF-8 BOM helps Excel open the file correctly on Windows
@@ -75,25 +70,13 @@ def export_transactions_csv():
 def summary_json():
     if not is_staff():
         return jsonify({"error": "Staff role required"}), 403
-    _ensure_report_data()
-    from sqlalchemy import func
-
-    from ..extensions import db
-
-    total = Transaction.query.count()
-    flagged = Transaction.query.filter_by(status="flagged").count()
-    approved = Transaction.query.filter_by(status="approved").count()
-    row = db.session.query(func.coalesce(func.sum(Transaction.amount), 0)).scalar()
-    volume = float(row or 0)
+    stats = compute_overview_stats()
     return (
         jsonify(
             {
                 "generated_at": datetime.utcnow().isoformat() + "Z",
-                "total_transactions": total,
-                "flagged": flagged,
-                "approved": approved,
-                "fraud_rate": (flagged / total) if total else 0,
-                "total_volume_usd": round(volume, 2),
+                **stats,
+                "total_volume_usd": stats["total_volume"],
             }
         ),
         200,
@@ -105,7 +88,6 @@ def summary_json():
 def audit_export():
     if not is_staff():
         return jsonify({"error": "Staff role required"}), 403
-    _ensure_report_data()
     logs = AuditLog.query.order_by(AuditLog.created_at.desc()).limit(500).all()
     payload = [
         {
@@ -130,21 +112,17 @@ def audit_export():
 def summary_pdf():
     if not is_staff():
         return jsonify({"error": "Staff role required"}), 403
-    _ensure_report_data()
     try:
         from fpdf import FPDF
     except ImportError:
         return jsonify({"error": "PDF export is temporarily unavailable. Contact your administrator."}), 503
 
-    from sqlalchemy import func
-
-    from ..extensions import db
-
-    total = Transaction.query.count()
-    flagged = Transaction.query.filter_by(status="flagged").count()
-    approved = Transaction.query.filter_by(status="approved").count()
-    volume = float(db.session.query(func.coalesce(func.sum(Transaction.amount), 0)).scalar() or 0)
-    fraud_rate = (flagged / total * 100) if total else 0
+    stats = compute_overview_stats()
+    total = stats["total_transactions"]
+    flagged = stats["flagged_transactions"]
+    approved = stats["approved_transactions"]
+    volume = stats["total_volume"]
+    fraud_rate = stats["fraud_rate"] * 100
 
     pdf = FPDF()
     pdf.set_auto_page_break(auto=True, margin=15)

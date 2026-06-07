@@ -221,3 +221,12 @@ export async function patchWithAuth<T>(path: string, body: unknown, token?: stri
   invalidateAfterMutation(path);
   return data as T;
 }
+
+export async function fetchPublic<T>(path: string): Promise<T> {
+  const response = await fetch(`${API_BASE}${path}`);
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(formatApiError(response.status, data));
+  }
+  return data as T;
+}

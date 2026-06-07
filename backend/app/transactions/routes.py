@@ -10,7 +10,7 @@ from ..models import DisputeCase, FraudDecision, FraudNotification, Transaction,
 from ..schemas import TransactionIngestSchema
 from ..services.audit import log_action
 from ..services.cache import get_or_set, invalidate_read_caches, scoped_key
-from ..services.seed_data import seed_all, seed_transactions_if_needed
+from ..services.seed_data import reseed_realistic_demo_data, seed_all
 from ..services.simulator import simulator_status, start_simulator, stop_simulator, tick_once
 from ..services.rbac import actor_user_id, can_manage_transaction, current_role, is_staff, scope_transactions
 from ..services.transaction_ingest import ingest_transaction_data
@@ -74,24 +74,18 @@ def ingest_transaction():
     except Exception as exc:
         db.session.rollback()
         return jsonify({"error": str(exc)}), 500
-    if role == "user":
-        tx = Transaction.query.get(result["transaction_id"])
-        return (
-            jsonify(
-                {
-                    "transaction_id": result["transaction_id"],
-                    "status": result["status"],
-                    "customer_status": _customer_status(tx) if tx else result["status"],
-                    "message": (
-                        "Transaction requires verification."
-                        if result["status"] == "flagged"
-                        else "Transaction processed."
-                    ),
-                }
-            ),
-            201,
-        )
-    return jsonify(result), 201
+
+    tx = Transaction.query.get(result["transaction_id"])
+    payload = {
+        **result,
+        "customer_status": _customer_status(tx) if tx else result["status"],
+        "message": (
+            "Transaction requires verification."
+            if result["status"] == "flagged"
+            else "Transaction processed."
+        ),
+    }
+    return jsonify(payload), 201
 
 
 @transactions_bp.post("/seed")
@@ -99,7 +93,13 @@ def ingest_transaction():
 def seed_endpoint():
     if _role() not in ("admin", "analyst"):
         return jsonify({"error": "Forbidden"}), 403
-    payload = seed_all(min_transactions=int(request.args.get("min", 80)))
+    force = request.args.get("force", "").lower() in ("1", "true", "yes")
+    if force:
+        min_count = int(request.args.get("min", 80))
+        payload = reseed_realistic_demo_data(min_transactions=min_count)
+        invalidate_read_caches()
+    else:
+        payload = seed_all(min_transactions=int(request.args.get("min", 80)))
     return jsonify(payload), 200
 
 
@@ -192,7 +192,6 @@ def flagged_transactions():
     ttl = _cache_ttl()
 
     def build():
-        seed_transactions_if_needed(min_count=20)
         txs = (
             scope_transactions(Transaction.query.filter(Transaction.status == "flagged"))
             .order_by(Transaction.created_at.desc())
