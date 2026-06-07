@@ -41,6 +41,8 @@ class Config:
         "AUTO_SEED_DEMO_DATA",
         "true" if SQLALCHEMY_DATABASE_URI.startswith("sqlite") else "false",
     ).lower() in ("1", "true", "yes")
+    CACHE_ENABLED = os.getenv("CACHE_ENABLED", "true").lower() in ("1", "true", "yes")
+    CACHE_TTL_SECONDS = int(os.getenv("CACHE_TTL_SECONDS", "30"))
     ALERT_EMAIL_FROM = os.getenv("ALERT_EMAIL_FROM", "alerts@example.com")
 
     FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000").rstrip("/")

@@ -1,22 +1,35 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
-import { Mail } from "lucide-react";
+import { ChevronRight, Mail } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
 import { RoleGuard } from "@/components/role-guard";
 import { ListSkeleton } from "@/components/skeletons";
-import { fetchWithAuth, patchWithAuth } from "@/lib/api";
+import { fetchWithAuth, patchWithAuth, peekApiCache } from "@/lib/api";
+import { notificationHref } from "@/lib/notification-links";
+import { useUserRole } from "@/lib/use-user-role";
 import type { FraudNotification } from "@/lib/types";
 
 export default function AlertsPage() {
-  const [items, setItems] = useState<FraudNotification[]>([]);
+  const role = useUserRole();
+  const [items, setItems] = useState<FraudNotification[]>(() => {
+    if (typeof window === "undefined") return [];
+    const token = localStorage.getItem("access_token") || "";
+    return peekApiCache<FraudNotification[]>("/alerts/notifications", token) ?? [];
+  });
   const [emails, setEmails] = useState<{ id: number; recipient: string; status: string; created_at: string }[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => {
+    if (typeof window === "undefined") return true;
+    const token = localStorage.getItem("access_token") || "";
+    return peekApiCache("/alerts/notifications", token) === null;
+  });
 
   useEffect(() => {
     const token = localStorage.getItem("access_token") || "";
-    setLoading(true);
+    const hasCache = peekApiCache("/alerts/notifications", token) !== null;
+    if (!hasCache) setLoading(true);
     Promise.all([
       fetchWithAuth<FraudNotification[]>("/alerts/notifications", token).catch(() => [] as FraudNotification[]),
       fetchWithAuth<{ id: number; recipient: string; status: string; created_at: string }[]>("/alerts/email-log", token).catch(
@@ -61,16 +74,17 @@ export default function AlertsPage() {
                 className={`rounded-xl border-l-4 bg-white/80 p-3 dark:bg-slate-900/60 ${sevColor(n.severity)}`}
               >
                 <div className="flex items-start justify-between gap-2">
-                  <div>
+                  <Link href={notificationHref(n, role)} className="min-w-0 flex-1 transition hover:opacity-90">
                     <p className="text-sm font-semibold">{n.title}</p>
                     <p className="text-soft mt-1 text-xs">{n.body}</p>
-                    <p className="text-soft mt-2 text-[10px] uppercase">
+                    <p className="text-soft mt-2 flex items-center gap-1 text-[10px] uppercase">
                       {n.category} · {n.severity} · {new Date(n.created_at).toLocaleString()}
+                      <ChevronRight className="h-3 w-3" aria-hidden="true" />
                     </p>
-                  </div>
+                  </Link>
                   <button
                     type="button"
-                    className="text-xs text-sky-700 underline dark:text-sky-400"
+                    className="shrink-0 text-xs text-sky-700 underline dark:text-sky-400"
                     onClick={() => void mark(n.id, !n.read)}
                   >
                     {n.read ? "Mark unread" : "Mark read"}

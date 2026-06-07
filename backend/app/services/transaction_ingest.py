@@ -9,6 +9,7 @@ from ..fraud.model import predict_fraud_probability
 from ..models import FraudDecision, FraudNotification, Transaction
 from ..services.alerts import send_email_alert
 from ..services.audit import log_action
+from ..services.cache import invalidate_read_caches
 
 
 def ingest_transaction_data(data: dict, *, actor_user_id: int | None = None) -> dict:
@@ -92,6 +93,7 @@ def ingest_transaction_data(data: dict, *, actor_user_id: int | None = None) -> 
         )
 
     db.session.commit()
+    invalidate_read_caches(user_id)
     return {
         "transaction_id": tx.id,
         "risk_score": result.final_score,

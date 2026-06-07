@@ -113,6 +113,7 @@ export type FraudNotification = {
   category: string;
   read: boolean;
   created_at: string;
+  transaction_id?: number | null;
 };
 
 export type AdminUser = {

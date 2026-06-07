@@ -1,6 +1,30 @@
+import {
+  apiCacheKey,
+  invalidateAfterMutation,
+  invalidateApiCache,
+  peekApiCache,
+  readApiCacheEntry,
+  writeApiCache,
+} from "@/lib/api-cache";
 import { clearClientSession } from "@/lib/auth-session";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://127.0.0.1:5000";
+/** Fresh window: serve cache only, no network. */
+const DEFAULT_CACHE_TTL_MS = 120_000;
+/** Stale window: show cache immediately, refresh in background. */
+const DEFAULT_CACHE_MAX_MS = 600_000;
+
+export type FetchWithAuthOptions = {
+  /** Fresh TTL in ms; 0 disables cache for this request. */
+  cacheTtlMs?: number;
+  /** Max stale age before forcing a network fetch. */
+  cacheMaxMs?: number;
+  forceRefresh?: boolean;
+};
+
+export { invalidateApiCache, peekApiCache };
+
+const inflight = new Map<string, Promise<unknown>>();
 
 export function getApiBase() {
   return API_BASE;
@@ -55,13 +79,63 @@ async function parseResponse<T>(response: Response): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-export async function fetchWithAuth<T>(path: string, token?: string): Promise<T> {
-  const auth = token ?? getStoredToken();
+async function fetchFromNetwork<T>(path: string, auth: string): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, {
     headers: auth ? { Authorization: `Bearer ${auth}` } : {},
     cache: "no-store",
   });
   return parseResponse<T>(response);
+}
+
+async function fetchAndStore<T>(path: string, auth: string, key: string, ttlMs: number): Promise<T> {
+  const existing = inflight.get(key);
+  if (existing) return existing as Promise<T>;
+
+  const request = fetchFromNetwork<T>(path, auth)
+    .then((data) => {
+      if (ttlMs > 0) writeApiCache(key, data);
+      return data;
+    })
+    .finally(() => {
+      inflight.delete(key);
+    });
+
+  inflight.set(key, request);
+  return request;
+}
+
+function revalidateInBackground<T>(path: string, auth: string, key: string, ttlMs: number): void {
+  if (inflight.has(key)) return;
+  void fetchAndStore<T>(path, auth, key, ttlMs).catch(() => {
+    /* keep stale data on background failure */
+  });
+}
+
+export async function fetchWithAuth<T>(
+  path: string,
+  token?: string,
+  options?: FetchWithAuthOptions
+): Promise<T> {
+  const auth = token ?? getStoredToken();
+  const freshMs = options?.cacheTtlMs ?? DEFAULT_CACHE_TTL_MS;
+  const staleMs = options?.cacheMaxMs ?? DEFAULT_CACHE_MAX_MS;
+  const key = apiCacheKey(path, auth);
+
+  if (freshMs > 0 && !options?.forceRefresh) {
+    const entry = readApiCacheEntry(key);
+    if (entry) {
+      const age = Date.now() - entry.fetchedAt;
+      if (age <= freshMs) {
+        return entry.data as T;
+      }
+      if (age <= staleMs) {
+        revalidateInBackground<T>(path, auth, key, freshMs);
+        return entry.data as T;
+      }
+    }
+  }
+
+  return fetchAndStore<T>(path, auth, key, freshMs);
 }
 
 export async function fetchBlobWithAuth(path: string, token?: string): Promise<Blob> {
@@ -104,6 +178,7 @@ export async function postWithAuth<T>(path: string, body: unknown, token?: strin
   if (!response.ok) {
     throw new Error(formatApiError(response.status, data));
   }
+  invalidateAfterMutation(path);
   return data as T;
 }
 
@@ -121,6 +196,7 @@ export async function deleteWithAuth<T>(path: string, token?: string): Promise<T
   if (!response.ok) {
     throw new Error(formatApiError(response.status, data));
   }
+  invalidateAfterMutation(path);
   return data as T;
 }
 
@@ -142,5 +218,6 @@ export async function patchWithAuth<T>(path: string, body: unknown, token?: stri
   if (!response.ok) {
     throw new Error(formatApiError(response.status, data));
   }
+  invalidateAfterMutation(path);
   return data as T;
 }

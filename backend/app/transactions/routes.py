@@ -9,12 +9,19 @@ from ..extensions import db
 from ..models import DisputeCase, FraudDecision, FraudNotification, Transaction, User
 from ..schemas import TransactionIngestSchema
 from ..services.audit import log_action
+from ..services.cache import get_or_set, invalidate_read_caches, scoped_key
 from ..services.seed_data import seed_all, seed_transactions_if_needed
 from ..services.simulator import simulator_status, start_simulator, stop_simulator, tick_once
 from ..services.rbac import actor_user_id, can_manage_transaction, current_role, is_staff, scope_transactions
 from ..services.transaction_ingest import ingest_transaction_data
 
 transactions_bp = Blueprint("transactions", __name__, url_prefix="/transactions")
+
+
+def _cache_ttl() -> float:
+    if not current_app.config.get("CACHE_ENABLED", True):
+        return 0.0
+    return float(current_app.config.get("CACHE_TTL_SECONDS", 30))
 
 
 def _role():
@@ -180,86 +187,101 @@ def transaction_feed():
 @transactions_bp.get("/flagged")
 @jwt_required()
 def flagged_transactions():
-    seed_transactions_if_needed(min_count=20)
-    txs = (
-        scope_transactions(Transaction.query.filter(Transaction.status == "flagged"))
-        .order_by(Transaction.created_at.desc())
-        .limit(100)
-        .all()
+    role = current_role()
+    uid = actor_user_id()
+    ttl = _cache_ttl()
+
+    def build():
+        seed_transactions_if_needed(min_count=20)
+        txs = (
+            scope_transactions(Transaction.query.filter(Transaction.status == "flagged"))
+            .order_by(Transaction.created_at.desc())
+            .limit(100)
+            .all()
+        )
+        return [_tx_dict(tx) for tx in txs]
+
+    payload = build() if ttl <= 0 else get_or_set(
+        scoped_key("transactions", "flagged", role, uid), ttl, build
     )
-    payload = [_tx_dict(tx) for tx in txs]
     return jsonify(payload), 200
 
 
 @transactions_bp.get("/list")
 @jwt_required()
 def list_transactions():
-    page = max(1, int(request.args.get("page", 1)))
-    per_page = min(100, max(5, int(request.args.get("per_page", 20))))
-    q = (request.args.get("q") or "").strip()
-    status = request.args.get("status")
-    risk_min = request.args.get("risk_min")
-    risk_max = request.args.get("risk_max")
-    country = request.args.get("country")
-    merchant = request.args.get("merchant")
-    date_from = request.args.get("date_from")
-    date_to = request.args.get("date_to")
-    sort = request.args.get("sort", "created_at_desc")
+    role = current_role()
+    uid = actor_user_id()
+    ttl = _cache_ttl()
+    query_key = request.query_string.decode("utf-8") or "default"
 
-    query = scope_transactions(Transaction.query)
-    if q:
-        clauses = [
-            Transaction.merchant.ilike(f"%{q}%"),
-            Transaction.location.ilike(f"%{q}%"),
-        ]
-        if q.isdigit():
-            clauses.append(Transaction.id == int(q))
-        if len(q) == 4 and q.isdigit():
-            clauses.append(Transaction.card_last4 == q)
-        query = query.filter(or_(*clauses))
-    if status:
-        query = query.filter(Transaction.status == status)
-    if country:
-        query = query.filter(Transaction.country.ilike(f"%{country}%"))
-    if merchant:
-        query = query.filter(Transaction.merchant.ilike(f"%{merchant}%"))
-    if risk_min:
-        query = query.filter(Transaction.risk_score >= float(risk_min))
-    if risk_max:
-        query = query.filter(Transaction.risk_score <= float(risk_max))
-    if date_from:
-        try:
-            query = query.filter(Transaction.created_at >= datetime.fromisoformat(date_from))
-        except ValueError:
-            pass
-    if date_to:
-        try:
-            query = query.filter(Transaction.created_at <= datetime.fromisoformat(date_to))
-        except ValueError:
-            pass
+    def build():
+        page = max(1, int(request.args.get("page", 1)))
+        per_page = min(100, max(5, int(request.args.get("per_page", 20))))
+        q = (request.args.get("q") or "").strip()
+        status = request.args.get("status")
+        risk_min = request.args.get("risk_min")
+        risk_max = request.args.get("risk_max")
+        country = request.args.get("country")
+        merchant = request.args.get("merchant")
+        date_from = request.args.get("date_from")
+        date_to = request.args.get("date_to")
+        sort = request.args.get("sort", "created_at_desc")
 
-    if sort == "amount_desc":
-        query = query.order_by(Transaction.amount.desc())
-    elif sort == "amount_asc":
-        query = query.order_by(Transaction.amount.asc())
-    elif sort == "risk_asc":
-        query = query.order_by(Transaction.risk_score.asc())
-    else:
-        query = query.order_by(Transaction.created_at.desc())
+        query = scope_transactions(Transaction.query)
+        if q:
+            clauses = [
+                Transaction.merchant.ilike(f"%{q}%"),
+                Transaction.location.ilike(f"%{q}%"),
+            ]
+            if q.isdigit():
+                clauses.append(Transaction.id == int(q))
+            if len(q) == 4 and q.isdigit():
+                clauses.append(Transaction.card_last4 == q)
+            query = query.filter(or_(*clauses))
+        if status:
+            query = query.filter(Transaction.status == status)
+        if country:
+            query = query.filter(Transaction.country.ilike(f"%{country}%"))
+        if merchant:
+            query = query.filter(Transaction.merchant.ilike(f"%{merchant}%"))
+        if risk_min:
+            query = query.filter(Transaction.risk_score >= float(risk_min))
+        if risk_max:
+            query = query.filter(Transaction.risk_score <= float(risk_max))
+        if date_from:
+            try:
+                query = query.filter(Transaction.created_at >= datetime.fromisoformat(date_from))
+            except ValueError:
+                pass
+        if date_to:
+            try:
+                query = query.filter(Transaction.created_at <= datetime.fromisoformat(date_to))
+            except ValueError:
+                pass
 
-    pagination = query.paginate(page=page, per_page=per_page, error_out=False)
-    return (
-        jsonify(
-            {
-                "items": [_tx_dict(tx) for tx in pagination.items],
-                "page": page,
-                "per_page": per_page,
-                "total": pagination.total,
-                "pages": pagination.pages,
-            }
-        ),
-        200,
+        if sort == "amount_desc":
+            query = query.order_by(Transaction.amount.desc())
+        elif sort == "amount_asc":
+            query = query.order_by(Transaction.amount.asc())
+        elif sort == "risk_asc":
+            query = query.order_by(Transaction.risk_score.asc())
+        else:
+            query = query.order_by(Transaction.created_at.desc())
+
+        pagination = query.paginate(page=page, per_page=per_page, error_out=False)
+        return {
+            "items": [_tx_dict(tx) for tx in pagination.items],
+            "page": page,
+            "per_page": per_page,
+            "total": pagination.total,
+            "pages": pagination.pages,
+        }
+
+    payload = build() if ttl <= 0 else get_or_set(
+        scoped_key("transactions", "list", role, uid, query_key), ttl, build
     )
+    return jsonify(payload), 200
 
 
 @transactions_bp.patch("/<int:transaction_id>/action")
@@ -300,6 +322,7 @@ def transaction_action(transaction_id: int):
         details={"new_status": tx.status},
     )
     db.session.commit()
+    invalidate_read_caches(tx.user_id)
     return jsonify({"message": "ok", "status": tx.status}), 200
 
 
@@ -358,6 +381,7 @@ def dispute_transaction(transaction_id: int):
         details={"reason": reason},
     )
     db.session.commit()
+    invalidate_read_caches(tx.user_id)
     return (
         jsonify(
             {

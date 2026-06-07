@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import {
   createContext,
   useCallback,
@@ -12,6 +13,9 @@ import {
 import { Bell, BellOff, X } from "lucide-react";
 
 import { AuthError, fetchWithAuth, getStoredToken } from "@/lib/api";
+import { notificationHref } from "@/lib/notification-links";
+import { transactionDetailHref } from "@/lib/transaction-links";
+import { useUserRole } from "@/lib/use-user-role";
 import {
   isHighRiskTransaction,
   isSoundMuted,
@@ -49,15 +53,20 @@ export function useTransactionNotifications() {
   return ctx;
 }
 
-function showBrowserNotification(tx: TransactionRow) {
+function showBrowserNotification(tx: TransactionRow, href: string) {
   if (typeof window === "undefined" || !document.hidden) return;
   if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
   const flagged = tx.status === "flagged" || tx.risk_score >= 60;
   try {
-    new Notification(flagged ? "Transaction requires verification" : "New transaction", {
+    const note = new Notification(flagged ? "Transaction requires verification" : "New transaction", {
       body: `TX #${tx.id} · $${tx.amount.toFixed(2)} · ${tx.merchant || tx.location}`,
       tag: `tx-${tx.id}`,
     });
+    note.onclick = () => {
+      window.focus();
+      window.location.assign(href);
+      note.close();
+    };
   } catch {
     /* ignore */
   }
@@ -68,6 +77,7 @@ export function TransactionNotificationProvider({ children }: { children: React.
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const lastIdRef = useRef(0);
   const bootstrappedRef = useRef(false);
+  const role = useUserRole();
 
   useEffect(() => {
     setMutedState(isSoundMuted());
@@ -96,13 +106,17 @@ export function TransactionNotificationProvider({ children }: { children: React.
         if (!isHighRiskTransaction(tx)) continue;
         hasHighRisk = true;
         pushToast(tx);
-        showBrowserNotification(tx);
+        const href =
+          role === "analyst" || role === "admin"
+            ? notificationHref({ transaction_id: tx.id, category: "suspicious_transaction" }, role)
+            : transactionDetailHref(tx.id);
+        showBrowserNotification(tx, href);
       }
       if (playSound && hasHighRisk) {
         await playHighRiskWarning();
       }
     },
-    [pushToast]
+    [pushToast, role]
   );
 
   const notifyLocal = useCallback(
@@ -157,7 +171,8 @@ export function TransactionNotificationProvider({ children }: { children: React.
       try {
         const feed = await fetchWithAuth<FeedResponse>(
           `/transactions/feed?after_id=${lastIdRef.current}`,
-          getStoredToken()
+          getStoredToken(),
+          { cacheTtlMs: 0 }
         );
         if (cancelled) return;
 
@@ -236,6 +251,8 @@ function TransactionToastStack({
   toasts: ToastItem[];
   onDismiss: (id: string) => void;
 }) {
+  const role = useUserRole();
+
   if (!toasts.length) return null;
 
   return (
@@ -245,10 +262,15 @@ function TransactionToastStack({
     >
       {toasts.map(({ id, tx }) => {
         const high = isHighRiskTransaction(tx);
+        const href =
+          role === "analyst" || role === "admin"
+            ? notificationHref({ transaction_id: tx.id, category: "suspicious_transaction" }, role)
+            : transactionDetailHref(tx.id);
         return (
-          <div
+          <Link
             key={id}
-            className={`pointer-events-auto animate-fade-up rounded-xl border p-3 shadow-lg backdrop-blur-md ${
+            href={href}
+            className={`pointer-events-auto block animate-fade-up rounded-xl border p-3 shadow-lg backdrop-blur-md transition hover:brightness-110 ${
               high
                 ? "border-red-500/30 bg-red-950/90 text-red-50"
                 : "border-cyan-500/25 bg-slate-900/95 text-slate-100"
@@ -260,7 +282,11 @@ function TransactionToastStack({
               </p>
               <button
                 type="button"
-                onClick={() => onDismiss(id)}
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  onDismiss(id);
+                }}
                 className="rounded p-0.5 opacity-70 hover:opacity-100"
                 aria-label="Dismiss"
               >
@@ -273,7 +299,7 @@ function TransactionToastStack({
             <p className="mt-0.5 text-xs opacity-80">
               {tx.merchant || "Merchant"} · {tx.location}
             </p>
-          </div>
+          </Link>
         );
       })}
     </div>

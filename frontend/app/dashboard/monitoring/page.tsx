@@ -7,7 +7,7 @@ import { ChevronRight, Filter, RefreshCw } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { RoleGuard } from "@/components/role-guard";
 import { TableSkeleton } from "@/components/skeletons";
-import { fetchWithAuth, patchWithAuth } from "@/lib/api";
+import { fetchWithAuth, patchWithAuth, peekApiCache } from "@/lib/api";
 import { transactionDetailHref } from "@/lib/transaction-links";
 import type { PaginatedTransactions, TransactionRow } from "@/lib/types";
 
@@ -42,9 +42,10 @@ export default function MonitoringPage() {
     if (status) params.set("status", status);
     if (riskMin) params.set("risk_min", riskMin);
     if (country) params.set("country", country);
-    setLoading(true);
+    const path = `/transactions/list?${params}`;
+    if (!peekApiCache(path, token)) setLoading(true);
     try {
-      const res = await fetchWithAuth<PaginatedTransactions>(`/transactions/list?${params}`, token);
+      const res = await fetchWithAuth<PaginatedTransactions>(path, token);
       setData(res);
     } catch {
       setData(null);

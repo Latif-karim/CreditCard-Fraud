@@ -25,6 +25,7 @@ import type { LucideIcon } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { RoleBanner } from "@/components/role-banner";
 import { fraudQueueHref, transactionDetailHref } from "@/lib/transaction-links";
+import { notificationHref } from "@/lib/notification-links";
 import { useHydrated } from "@/lib/use-hydrated";
 import { useUserRole } from "@/lib/use-user-role";
 
@@ -49,7 +50,7 @@ const SimpleBarChart = dynamic(
 import { KpiCard } from "@/components/kpi-card";
 import { RiskHeatmap } from "@/components/risk-heatmap";
 import { ScrollReveal } from "@/components/scroll-reveal";
-import { fetchWithAuth, postWithAuth } from "@/lib/api";
+import { fetchWithAuth, peekApiCache, postWithAuth } from "@/lib/api";
 import type {
   AuditLog,
   DashboardOverview,
@@ -72,24 +73,66 @@ type RecentTx = {
   customer_status?: string;
 };
 
+function bootstrapToken(): string {
+  if (typeof window === "undefined") return "";
+  return localStorage.getItem("access_token") || "";
+}
+
+function dashboardHasCache(token: string): boolean {
+  return peekApiCache("/dashboard/overview", token) !== null;
+}
+
 export default function DashboardPage() {
   const router = useRouter();
   const hydrated = useHydrated();
   const role = useUserRole();
   const isStaff = hydrated && (role === "analyst" || role === "admin");
   const queueHref = fraudQueueHref(role);
-  const [overview, setOverview] = useState<DashboardOverview | null>(null);
-  const [trends, setTrends] = useState<TrendResponse | null>(null);
-  const [flagged, setFlagged] = useState<FlaggedTransaction[]>([]);
-  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
-  const [region, setRegion] = useState<LabelValueResponse | null>(null);
-  const [cardType, setCardType] = useState<LabelValueResponse | null>(null);
-  const [heatmap, setHeatmap] = useState<HeatmapResponse | null>(null);
-  const [recent, setRecent] = useState<RecentTx[]>([]);
-  const [live, setLive] = useState<LiveActivityItem[]>([]);
-  const [notifications, setNotifications] = useState<FraudNotification[]>([]);
-  const [modelMetrics, setModelMetrics] = useState<Record<string, unknown> | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [overview, setOverview] = useState<DashboardOverview | null>(() => {
+    const token = bootstrapToken();
+    return token ? peekApiCache<DashboardOverview>("/dashboard/overview", token) : null;
+  });
+  const [trends, setTrends] = useState<TrendResponse | null>(() => {
+    const token = bootstrapToken();
+    return token ? peekApiCache<TrendResponse>("/dashboard/trends", token) : null;
+  });
+  const [flagged, setFlagged] = useState<FlaggedTransaction[]>(() => {
+    const token = bootstrapToken();
+    return token ? peekApiCache<FlaggedTransaction[]>("/transactions/flagged", token) ?? [] : [];
+  });
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => {
+    const token = bootstrapToken();
+    return token ? peekApiCache<AuditLog[]>("/dashboard/audit-logs", token)?.slice(0, 6) ?? [] : [];
+  });
+  const [region, setRegion] = useState<LabelValueResponse | null>(() => {
+    const token = bootstrapToken();
+    return token ? peekApiCache<LabelValueResponse>("/dashboard/fraud-by-region", token) : null;
+  });
+  const [cardType, setCardType] = useState<LabelValueResponse | null>(() => {
+    const token = bootstrapToken();
+    return token ? peekApiCache<LabelValueResponse>("/dashboard/fraud-by-card", token) : null;
+  });
+  const [heatmap, setHeatmap] = useState<HeatmapResponse | null>(() => {
+    const token = bootstrapToken();
+    return token ? peekApiCache<HeatmapResponse>("/dashboard/heatmap", token) : null;
+  });
+  const [recent, setRecent] = useState<RecentTx[]>(() => {
+    const token = bootstrapToken();
+    return token ? peekApiCache<RecentTx[]>("/dashboard/recent-transactions", token) ?? [] : [];
+  });
+  const [live, setLive] = useState<LiveActivityItem[]>(() => {
+    const token = bootstrapToken();
+    return token ? peekApiCache<LiveActivityItem[]>("/dashboard/live-activity", token) ?? [] : [];
+  });
+  const [notifications, setNotifications] = useState<FraudNotification[]>(() => {
+    const token = bootstrapToken();
+    return token ? peekApiCache<FraudNotification[]>("/alerts/notifications", token) ?? [] : [];
+  });
+  const [modelMetrics, setModelMetrics] = useState<Record<string, unknown> | null>(() => {
+    const token = bootstrapToken();
+    return token ? peekApiCache<Record<string, unknown>>("/dashboard/model-metrics", token) : null;
+  });
+  const [loading, setLoading] = useState(() => !dashboardHasCache(bootstrapToken()));
   const [disputeBusy, setDisputeBusy] = useState<number | null>(null);
   const [disputeNotice, setDisputeNotice] = useState("");
 
@@ -97,90 +140,68 @@ export default function DashboardPage() {
     if (!hydrated || !role) return;
     const token = localStorage.getItem("access_token") || "";
     const load = async () => {
-      setLoading(true);
+      const showSkeleton = !dashboardHasCache(token);
+      if (showSkeleton) setLoading(true);
       setDisputeNotice("");
-      try {
-        setOverview(await fetchWithAuth<DashboardOverview>("/dashboard/overview", token));
-      } catch {
-        setOverview(null);
-      }
+
       if (role === "user") {
-        try {
-          setRecent(await fetchWithAuth<RecentTx[]>("/dashboard/recent-transactions", token));
-        } catch {
-          setRecent([]);
-        }
-        try {
-          setLive(await fetchWithAuth<LiveActivityItem[]>("/dashboard/live-activity", token));
-        } catch {
-          setLive([]);
-        }
-        try {
-          setNotifications(await fetchWithAuth<FraudNotification[]>("/alerts/notifications", token));
-        } catch {
-          setNotifications([]);
-        } finally {
-          setFlagged([]);
-          setAuditLogs([]);
-          setRegion(null);
-          setCardType(null);
-          setHeatmap(null);
-          setModelMetrics(null);
-          setLoading(false);
-        }
+        const [overviewRes, recentRes, liveRes, notifsRes] = await Promise.all([
+          fetchWithAuth<DashboardOverview>("/dashboard/overview", token).catch(() => null),
+          fetchWithAuth<RecentTx[]>("/dashboard/recent-transactions", token).catch(() => []),
+          fetchWithAuth<LiveActivityItem[]>("/dashboard/live-activity", token).catch(() => []),
+          fetchWithAuth<FraudNotification[]>("/alerts/notifications", token).catch(() => []),
+        ]);
+        setOverview(overviewRes);
+        setRecent(recentRes ?? []);
+        setLive(liveRes ?? []);
+        setNotifications(notifsRes ?? []);
+        setFlagged([]);
+        setAuditLogs([]);
+        setRegion(null);
+        setCardType(null);
+        setHeatmap(null);
+        setModelMetrics(null);
+        setLoading(false);
         return;
       }
-      try {
-        setTrends(await fetchWithAuth<TrendResponse>("/dashboard/trends", token));
-      } catch {
-        setTrends(null);
-      }
-      try {
-        const f = await fetchWithAuth<FlaggedTransaction[]>("/transactions/flagged", token);
-        setFlagged(f.slice(0, 6));
-      } catch {
-        setFlagged([]);
-      }
-      if (isStaff) {
-        try {
-          const a = await fetchWithAuth<AuditLog[]>("/dashboard/audit-logs", token);
-          setAuditLogs(a.slice(0, 6));
-        } catch {
-          setAuditLogs([]);
-        }
-      }
-      try {
-        setRegion(await fetchWithAuth<LabelValueResponse>("/dashboard/fraud-by-region", token));
-      } catch {
-        setRegion(null);
-      }
-      try {
-        setCardType(await fetchWithAuth<LabelValueResponse>("/dashboard/fraud-by-card", token));
-      } catch {
-        setCardType(null);
-      }
-      try {
-        setHeatmap(await fetchWithAuth<HeatmapResponse>("/dashboard/heatmap", token));
-      } catch {
-        setHeatmap(null);
-      }
-      try {
-        setRecent(await fetchWithAuth<RecentTx[]>("/dashboard/recent-transactions", token));
-      } catch {
-        setRecent([]);
-      }
-      try {
-        setLive(await fetchWithAuth<LiveActivityItem[]>("/dashboard/live-activity", token));
-      } catch {
-        setLive([]);
-      }
-      try {
-        setModelMetrics(await fetchWithAuth<Record<string, unknown>>("/dashboard/model-metrics", token));
-      } catch {
-        setModelMetrics(null);
-      } finally {
-        setLoading(false);
-      }
+
+      const [
+        overviewRes,
+        trendsRes,
+        flaggedRes,
+        auditRes,
+        regionRes,
+        cardRes,
+        heatmapRes,
+        recentRes,
+        liveRes,
+        metricsRes,
+      ] = await Promise.all([
+        fetchWithAuth<DashboardOverview>("/dashboard/overview", token).catch(() => null),
+        fetchWithAuth<TrendResponse>("/dashboard/trends", token).catch(() => null),
+        fetchWithAuth<FlaggedTransaction[]>("/transactions/flagged", token).catch(() => []),
+        isStaff
+          ? fetchWithAuth<AuditLog[]>("/dashboard/audit-logs", token).catch(() => [])
+          : Promise.resolve([] as AuditLog[]),
+        fetchWithAuth<LabelValueResponse>("/dashboard/fraud-by-region", token).catch(() => null),
+        fetchWithAuth<LabelValueResponse>("/dashboard/fraud-by-card", token).catch(() => null),
+        fetchWithAuth<HeatmapResponse>("/dashboard/heatmap", token).catch(() => null),
+        fetchWithAuth<RecentTx[]>("/dashboard/recent-transactions", token).catch(() => []),
+        fetchWithAuth<LiveActivityItem[]>("/dashboard/live-activity", token).catch(() => []),
+        fetchWithAuth<Record<string, unknown>>("/dashboard/model-metrics", token).catch(() => null),
+      ]);
+
+      setOverview(overviewRes);
+      setTrends(trendsRes);
+      setFlagged((flaggedRes ?? []).slice(0, 6));
+      setAuditLogs((auditRes ?? []).slice(0, 6));
+      setRegion(regionRes);
+      setCardType(cardRes);
+      setHeatmap(heatmapRes);
+      setRecent(recentRes ?? []);
+      setLive(liveRes ?? []);
+      setModelMetrics(metricsRes);
+      setLoading(false);
     };
     void load();
   }, [hydrated, isStaff, role]);
@@ -375,20 +396,22 @@ export default function DashboardPage() {
           </div>
 
           <div className="grid gap-4 lg:grid-cols-2">
-            <div className="glass-card p-4">
+            <div className="glass-card p-4" id="alert-feed">
               <PanelTitle icon={Bell} title="Fraud alerts" />
               <div className="space-y-3">
                 {notifications.map((n) => (
-                  <div
+                  <Link
                     key={n.id}
-                    className="rounded-xl border border-amber-200 bg-amber-50/60 p-3 text-sm dark:border-amber-900 dark:bg-amber-950/30"
+                    href={notificationHref(n, role)}
+                    className="block rounded-xl border border-amber-200 bg-amber-50/60 p-3 text-sm transition hover:border-amber-300 hover:bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30 dark:hover:border-amber-800"
                   >
                     <p className="font-semibold text-slate-900 dark:text-white">{n.title}</p>
                     <p className="text-soft mt-1 text-xs">{n.body}</p>
-                    <p className="text-soft mt-2 text-[10px] uppercase tracking-wide">
+                    <p className="text-soft mt-2 flex items-center gap-1 text-[10px] uppercase tracking-wide">
                       {new Date(n.created_at).toLocaleString()}
+                      <ChevronRight className="h-3 w-3" aria-hidden="true" />
                     </p>
-                  </div>
+                  </Link>
                 ))}
                 {!notifications.length ? (
                   <p className="text-soft rounded-xl border border-slate-200 px-3 py-2 text-sm dark:border-slate-800">

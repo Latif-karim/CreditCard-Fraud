@@ -16,6 +16,7 @@ from ..models import (
     UserProfile,
     UserSession,
 )
+from ..services.cache import invalidate_read_caches
 
 
 def count_platform_records() -> dict:
@@ -127,6 +128,7 @@ def purge_all_transaction_data() -> dict:
         profile.tx_count = 0
         profile.top_locations = ""
 
+    invalidate_read_caches()
     return {
         "transactions_removed": transactions_removed,
         "fraud_decisions_removed": decisions_removed,
