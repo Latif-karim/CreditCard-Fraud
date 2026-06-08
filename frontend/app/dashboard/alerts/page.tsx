@@ -1,47 +1,64 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ChevronRight, Mail } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
 import { RoleGuard } from "@/components/role-guard";
 import { ListSkeleton } from "@/components/skeletons";
-import { fetchWithAuth, patchWithAuth, peekApiCache } from "@/lib/api";
+import { fetchWithAuth, patchWithAuth } from "@/lib/api";
+import { type LiveStreamEvent } from "@/lib/live-updates";
 import { notificationHref } from "@/lib/notification-links";
 import { useUserRole } from "@/lib/use-user-role";
+import { useHydrated } from "@/lib/use-hydrated";
+import { useLiveEvent } from "@/lib/use-live-event";
 import type { FraudNotification } from "@/lib/types";
 
 export default function AlertsPage() {
   const role = useUserRole();
-  const [items, setItems] = useState<FraudNotification[]>(() => {
-    if (typeof window === "undefined") return [];
-    const token = localStorage.getItem("access_token") || "";
-    return peekApiCache<FraudNotification[]>("/alerts/notifications", token) ?? [];
-  });
+  const hydrated = useHydrated();
+  const [items, setItems] = useState<FraudNotification[]>([]);
   const [emails, setEmails] = useState<{ id: number; recipient: string; status: string; created_at: string }[]>([]);
-  const [loading, setLoading] = useState(() => {
-    if (typeof window === "undefined") return true;
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
     const token = localStorage.getItem("access_token") || "";
-    return peekApiCache("/alerts/notifications", token) === null;
-  });
+    if (!token) return;
+    try {
+      const [notifs, log] = await Promise.all([
+        fetchWithAuth<FraudNotification[]>("/alerts/notifications", token).catch(
+          () => [] as FraudNotification[]
+        ),
+        fetchWithAuth<{ id: number; recipient: string; status: string; created_at: string }[]>(
+          "/alerts/email-log",
+          token
+        ).catch(() => [] as { id: number; recipient: string; status: string; created_at: string }[]),
+      ]);
+      setItems(notifs);
+      setEmails(log);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    const token = localStorage.getItem("access_token") || "";
-    const hasCache = peekApiCache("/alerts/notifications", token) !== null;
-    if (!hasCache) setLoading(true);
-    Promise.all([
-      fetchWithAuth<FraudNotification[]>("/alerts/notifications", token).catch(() => [] as FraudNotification[]),
-      fetchWithAuth<{ id: number; recipient: string; status: string; created_at: string }[]>("/alerts/email-log", token).catch(
-        () => [] as { id: number; recipient: string; status: string; created_at: string }[]
-      ),
-    ])
-      .then(([notifs, log]) => {
-        setItems(notifs);
-        setEmails(log);
-      })
-      .finally(() => setLoading(false));
-  }, []);
+    if (!hydrated) return;
+    setLoading(true);
+    void load();
+  }, [hydrated, load]);
+
+  useLiveEvent(
+    useCallback((event: LiveStreamEvent) => {
+      if (event.type === "transaction.created" && event.notification) {
+        setItems((prev) => {
+          if (prev.some((n) => n.id === event.notification!.id)) return prev;
+          return [event.notification!, ...prev];
+        });
+      }
+    }, []),
+    hydrated
+  );
 
   const mark = async (id: number, read: boolean) => {
     const token = localStorage.getItem("access_token") || "";
@@ -58,7 +75,7 @@ export default function AlertsPage() {
   return (
     <RoleGuard allow={["analyst", "admin"]} title="Alerts">
     <AppShell title="Alerts & notifications" subtitle="Fraud operations inbox">
-      {loading ? (
+      {!hydrated || loading ? (
         <div className="grid gap-4 lg:grid-cols-2">
           <ListSkeleton items={4} />
           <ListSkeleton items={4} />

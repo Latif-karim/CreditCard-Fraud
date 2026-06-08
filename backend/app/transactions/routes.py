@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
+import queue as queue_module
 
-from flask import Blueprint, current_app, jsonify, request
+from flask import Blueprint, Response, current_app, jsonify, request, stream_with_context
 from flask_jwt_extended import get_jwt_identity, jwt_required
 from marshmallow import ValidationError
 from sqlalchemy import or_
@@ -10,6 +11,8 @@ from ..models import DisputeCase, FraudDecision, FraudNotification, Transaction,
 from ..schemas import TransactionIngestSchema
 from ..services.audit import log_action
 from ..services.cache import get_or_set, invalidate_read_caches, scoped_key
+from ..services.live_events import subscribe, unsubscribe
+from ..services.live_payloads import publish_transaction_updated
 from ..services.seed_data import reseed_realistic_demo_data, seed_all
 from ..services.simulator import simulator_status, start_simulator, stop_simulator, tick_once
 from ..services.rbac import actor_user_id, can_manage_transaction, current_role, is_staff, scope_transactions
@@ -18,8 +21,10 @@ from ..services.transaction_ingest import ingest_transaction_data
 transactions_bp = Blueprint("transactions", __name__, url_prefix="/transactions")
 
 
-def _cache_ttl() -> float:
+def _cache_ttl(*, live: bool = False) -> float:
     if not current_app.config.get("CACHE_ENABLED", True):
+        return 0.0
+    if live:
         return 0.0
     return float(current_app.config.get("CACHE_TTL_SECONDS", 30))
 
@@ -184,12 +189,43 @@ def transaction_feed():
     )
 
 
+@transactions_bp.get("/stream")
+@jwt_required(locations=["headers", "query_string"])
+def transaction_stream():
+    """Server-Sent Events — push live transaction updates (no polling)."""
+    identity = get_jwt_identity()
+    if not identity:
+        return jsonify({"error": "Unauthorized"}), 401
+    user_id = int(identity)
+    role = current_role()
+    sub = subscribe(user_id=user_id, role=role)
+
+    @stream_with_context
+    def generate():
+        try:
+            yield "event: connected\ndata: {}\n\n"
+            while True:
+                try:
+                    msg = sub.queue.get(timeout=25)
+                    yield f"event: live\ndata: {msg}\n\n"
+                except queue_module.Empty:
+                    yield ": heartbeat\n\n"
+        finally:
+            unsubscribe(sub)
+
+    response = Response(generate(), mimetype="text/event-stream")
+    response.headers["Cache-Control"] = "no-cache"
+    response.headers["Connection"] = "keep-alive"
+    response.headers["X-Accel-Buffering"] = "no"
+    return response
+
+
 @transactions_bp.get("/flagged")
 @jwt_required()
 def flagged_transactions():
     role = current_role()
     uid = actor_user_id()
-    ttl = _cache_ttl()
+    ttl = _cache_ttl(live=True)
 
     def build():
         txs = (
@@ -211,7 +247,7 @@ def flagged_transactions():
 def list_transactions():
     role = current_role()
     uid = actor_user_id()
-    ttl = _cache_ttl()
+    ttl = _cache_ttl(live=True)
     query_key = request.query_string.decode("utf-8") or "default"
 
     def build():
@@ -322,6 +358,7 @@ def transaction_action(transaction_id: int):
     )
     db.session.commit()
     invalidate_read_caches(tx.user_id)
+    publish_transaction_updated(tx)
     return jsonify({"message": "ok", "status": tx.status}), 200
 
 

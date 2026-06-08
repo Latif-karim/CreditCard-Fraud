@@ -12,10 +12,12 @@ import {
 } from "react";
 import { Bell, BellOff, X } from "lucide-react";
 
-import { AuthError, fetchWithAuth, getStoredToken } from "@/lib/api";
+import { useLiveStreamConnection } from "@/components/live-stream-provider";
+import { dispatchLiveEvent, type LiveStreamEvent } from "@/lib/live-updates";
 import { notificationHref } from "@/lib/notification-links";
 import { transactionDetailHref } from "@/lib/transaction-links";
 import { useUserRole } from "@/lib/use-user-role";
+import { useLiveEvent } from "@/lib/use-live-event";
 import {
   isHighRiskTransaction,
   isSoundMuted,
@@ -23,6 +25,7 @@ import {
   playTransactionAlert,
   setSoundMuted,
 } from "@/lib/transaction-sound";
+import { useHydrated } from "@/lib/use-hydrated";
 import type { TransactionRow } from "@/lib/types";
 
 type ToastItem = {
@@ -31,15 +34,9 @@ type ToastItem = {
   at: number;
 };
 
-type FeedResponse = {
-  items: TransactionRow[];
-  latest_id: number;
-};
-
 type TxNotifyContextValue = {
   muted: boolean;
   setMuted: (m: boolean) => void;
-  acknowledgeThrough: (id: number) => void;
   notifyLocal: (tx: Partial<TransactionRow> & { id: number; amount: number }) => void;
 };
 
@@ -73,13 +70,6 @@ function markNotified(id: number) {
   persistNotifiedIds(next);
 }
 
-function markNotifiedMany(ids: number[]) {
-  if (!ids.length) return;
-  const next = loadNotifiedIds();
-  ids.forEach((id) => next.add(id));
-  persistNotifiedIds(next);
-}
-
 export function useTransactionNotifications() {
   const ctx = useContext(TxNotifyContext);
   if (!ctx) {
@@ -110,12 +100,15 @@ function showBrowserNotification(tx: TransactionRow, href: string) {
 export function TransactionNotificationProvider({ children }: { children: React.ReactNode }) {
   const [muted, setMutedState] = useState(false);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
-  const lastIdRef = useRef(0);
-  const bootstrappedRef = useRef(false);
   const role = useUserRole();
+  const hydrated = useHydrated();
+  const seenRef = useRef<Set<number>>(new Set());
+
+  useLiveStreamConnection(hydrated);
 
   useEffect(() => {
     setMutedState(isSoundMuted());
+    seenRef.current = loadNotifiedIds();
   }, []);
 
   const setMuted = useCallback((m: boolean) => {
@@ -130,31 +123,40 @@ export function TransactionNotificationProvider({ children }: { children: React.
     });
   }, []);
 
-  const handleNewTransactions = useCallback(
-    async (items: TransactionRow[], playSound: boolean) => {
-      if (!items.length) return;
-      const notified = loadNotifiedIds();
-      let hasHighRisk = false;
-      for (const tx of items) {
-        if (tx.id > lastIdRef.current) {
-          lastIdRef.current = tx.id;
+  const handleLiveTx = useCallback(
+    async (tx: TransactionRow, playSound: boolean) => {
+      if (seenRef.current.has(tx.id)) return;
+      seenRef.current.add(tx.id);
+      markNotified(tx.id);
+
+      pushToast(tx);
+      const href =
+        role === "analyst" || role === "admin"
+          ? notificationHref({ transaction_id: tx.id, category: "suspicious_transaction" }, role)
+          : transactionDetailHref(tx.id);
+      showBrowserNotification(tx, href);
+
+      if (playSound) {
+        if (isHighRiskTransaction(tx)) {
+          await playHighRiskWarning();
+        } else {
+          await playTransactionAlert();
         }
-        if (!isHighRiskTransaction(tx)) continue;
-        if (notified.has(tx.id)) continue;
-        hasHighRisk = true;
-        markNotified(tx.id);
-        pushToast(tx);
-        const href =
-          role === "analyst" || role === "admin"
-            ? notificationHref({ transaction_id: tx.id, category: "suspicious_transaction" }, role)
-            : transactionDetailHref(tx.id);
-        showBrowserNotification(tx, href);
-      }
-      if (playSound && hasHighRisk) {
-        await playHighRiskWarning();
       }
     },
     [pushToast, role]
+  );
+
+  useLiveEvent(
+    useCallback(
+      (event: LiveStreamEvent) => {
+        if (event.type === "transaction.created") {
+          void handleLiveTx(event.transaction, true);
+        }
+      },
+      [handleLiveTx]
+    ),
+    hydrated
   );
 
   const notifyLocal = useCallback(
@@ -176,27 +178,10 @@ export function TransactionNotificationProvider({ children }: { children: React.
         confidence: partial.confidence ?? 0,
         created_at: partial.created_at ?? new Date().toISOString(),
       };
-      if (tx.id > lastIdRef.current) {
-        lastIdRef.current = tx.id;
-      }
-      markNotified(tx.id);
-      if (!isHighRiskTransaction(tx)) {
-        void playTransactionAlert();
-        pushToast(tx);
-        return;
-      }
-      void playHighRiskWarning();
-      pushToast(tx);
+      dispatchLiveEvent({ type: "transaction.created", transaction: tx });
     },
-    [pushToast]
+    []
   );
-
-  const acknowledgeThrough = useCallback((id: number) => {
-    if (id > lastIdRef.current) {
-      lastIdRef.current = id;
-    }
-    markNotified(id);
-  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -206,55 +191,6 @@ export function TransactionNotificationProvider({ children }: { children: React.
   }, []);
 
   useEffect(() => {
-    const token = getStoredToken();
-    if (!token) return;
-
-    let cancelled = false;
-
-    const poll = async () => {
-      if (!getStoredToken()) return;
-      try {
-        const feed = await fetchWithAuth<FeedResponse>(
-          `/transactions/feed?after_id=${lastIdRef.current}`,
-          getStoredToken(),
-          { cacheTtlMs: 0 }
-        );
-        if (cancelled) return;
-
-        if (!bootstrappedRef.current) {
-          bootstrappedRef.current = true;
-          if (feed.latest_id > lastIdRef.current) {
-            lastIdRef.current = feed.latest_id;
-          }
-          markNotifiedMany(feed.items.map((tx) => tx.id));
-          if (feed.latest_id > 0) {
-            markNotified(feed.latest_id);
-          }
-          return;
-        }
-
-        if (feed.items.length > 0) {
-          await handleNewTransactions(feed.items, true);
-        } else if (feed.latest_id > lastIdRef.current) {
-          lastIdRef.current = feed.latest_id;
-          markNotified(feed.latest_id);
-        }
-      } catch (err) {
-        if (err instanceof AuthError) {
-          cancelled = true;
-        }
-      }
-    };
-
-    void poll();
-    const id = window.setInterval(() => void poll(), 4000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(id);
-    };
-  }, [handleNewTransactions]);
-
-  useEffect(() => {
     const t = window.setInterval(() => {
       const cutoff = Date.now() - 8000;
       setToasts((prev) => prev.filter((x) => x.at > cutoff));
@@ -262,10 +198,7 @@ export function TransactionNotificationProvider({ children }: { children: React.
     return () => window.clearInterval(t);
   }, []);
 
-  const ctxValue = useMemo(
-    () => ({ muted, setMuted, acknowledgeThrough, notifyLocal }),
-    [muted, setMuted, acknowledgeThrough, notifyLocal]
-  );
+  const ctxValue = useMemo(() => ({ muted, setMuted, notifyLocal }), [muted, setMuted, notifyLocal]);
 
   return (
     <TxNotifyContext.Provider value={ctxValue}>
@@ -276,7 +209,13 @@ export function TransactionNotificationProvider({ children }: { children: React.
 }
 
 export function NotificationSoundToggle() {
+  const hydrated = useHydrated();
   const { muted, setMuted } = useTransactionNotifications();
+
+  if (!hydrated) {
+    return <span className="inline-block h-9 w-9 shrink-0 rounded-lg" aria-hidden />;
+  }
+
   return (
     <button
       type="button"

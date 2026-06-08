@@ -86,6 +86,19 @@ def ingest_transaction_data(
 
     db.session.commit()
     invalidate_read_caches(user_id)
+
+    notification = None
+    if result.final_score >= 60 and not quiet:
+        notification = (
+            FraudNotification.query.filter_by(transaction_id=tx.id)
+            .order_by(FraudNotification.id.desc())
+            .first()
+        )
+
+    from .live_payloads import publish_transaction_created
+
+    publish_transaction_created(tx, notification)
+
     return {
         "transaction_id": tx.id,
         "risk_score": result.final_score,

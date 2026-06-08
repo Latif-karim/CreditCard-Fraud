@@ -61,8 +61,13 @@ function NavLink({ href, label }: NavItem) {
 }
 
 function AccountNav() {
+  const hydrated = useHydrated();
   const pathname = usePathname();
   const { loggedIn, logout } = useClientSession();
+
+  if (!hydrated) {
+    return <div className="h-10 rounded-xl bg-slate-100/80 dark:bg-slate-900/60" aria-hidden />;
+  }
 
   if (loggedIn) {
     return (

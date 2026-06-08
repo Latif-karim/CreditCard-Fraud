@@ -20,11 +20,11 @@ import { fetchPublic } from "@/lib/api";
 import type { PublicStats } from "@/lib/types";
 
 const fade = {
-  initial: { opacity: 0, y: 12 },
+  initial: false,
   whileInView: { opacity: 1, y: 0 },
   viewport: { once: true, margin: "0px 0px -8% 0px" },
   transition: { duration: 0.68, ease: [0.22, 1, 0.36, 1] },
-};
+} as const;
 
 function formatPercent(rate: number | undefined | null): string {
   if (rate == null || Number.isNaN(rate)) return "0.00%";
@@ -193,7 +193,7 @@ export default function LandingPage() {
       </main>
 
       <footer className="border-t border-slate-200 py-10 text-center text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
-        © {new Date().getFullYear()} FraudShield. All rights reserved.
+        <span suppressHydrationWarning>© {new Date().getFullYear()} FraudShield. All rights reserved.</span>
       </footer>
     </div>
   );

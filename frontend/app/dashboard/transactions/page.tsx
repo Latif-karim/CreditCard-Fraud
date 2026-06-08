@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronRight, Clock3, ShieldAlert } from "lucide-react";
 
@@ -8,8 +8,22 @@ import { AppShell } from "@/components/app-shell";
 import { RoleGuard } from "@/components/role-guard";
 import { CardGridSkeleton, TableSkeleton } from "@/components/skeletons";
 import { fetchWithAuth } from "@/lib/api";
+import {
+  applyCreatedToOverview,
+  toFlaggedTransaction,
+  type LiveStreamEvent,
+} from "@/lib/live-updates";
 import { monitoringHref, transactionDetailHref } from "@/lib/transaction-links";
+import { useLiveEvent } from "@/lib/use-live-event";
 import type { DashboardOverview, FlaggedTransaction } from "@/lib/types";
+
+const EMPTY_OVERVIEW: DashboardOverview = {
+  total_transactions: 0,
+  flagged_transactions: 0,
+  approved_transactions: 0,
+  fraud_rate: 0,
+  total_volume: 0,
+};
 
 export default function TransactionsPage() {
   const router = useRouter();
@@ -17,19 +31,54 @@ export default function TransactionsPage() {
   const [overview, setOverview] = useState<DashboardOverview | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  const load = useCallback(async () => {
     const token = localStorage.getItem("access_token") || "";
-    setLoading(true);
-    Promise.all([
-      fetchWithAuth<FlaggedTransaction[]>("/transactions/flagged", token).catch(() => []),
-      fetchWithAuth<DashboardOverview>("/dashboard/overview", token).catch(() => null),
-    ])
-      .then(([txs, stats]) => {
-        setTransactions(txs);
-        setOverview(stats);
-      })
-      .finally(() => setLoading(false));
+    if (!token) return;
+    try {
+      const [txs, stats] = await Promise.all([
+        fetchWithAuth<FlaggedTransaction[]>("/transactions/flagged", token).catch(() => []),
+        fetchWithAuth<DashboardOverview>("/dashboard/overview", token).catch(() => null),
+      ]);
+      setTransactions(txs);
+      setOverview(stats);
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    setLoading(true);
+    void load();
+  }, [load]);
+
+  useLiveEvent(
+    useCallback((event: LiveStreamEvent) => {
+      if (event.type === "transaction.created") {
+        const tx = event.transaction;
+        setOverview((prev) => applyCreatedToOverview(prev ?? EMPTY_OVERVIEW, tx));
+        if (tx.status !== "flagged") return;
+        setTransactions((prev) => {
+          if (prev.some((f) => f.id === tx.id)) return prev;
+          return [toFlaggedTransaction(tx), ...prev];
+        });
+        return;
+      }
+      if (event.type === "transaction.updated") {
+        const tx = event.transaction;
+        if (tx.status === "flagged") {
+          setTransactions((prev) => {
+            if (prev.some((f) => f.id === tx.id)) {
+              return prev.map((f) => (f.id === tx.id ? toFlaggedTransaction(tx) : f));
+            }
+            return [toFlaggedTransaction(tx), ...prev];
+          });
+        } else {
+          setTransactions((prev) => prev.filter((f) => f.id !== tx.id));
+        }
+      }
+    }, []),
+    true
+  );
 
   const openCases = transactions.length;
   const flaggedRate = overview?.fraud_rate ?? 0;
@@ -81,22 +130,14 @@ export default function TransactionsPage() {
                 {transactions.map((tx) => (
                   <tr
                     key={tx.id}
-                    role="button"
-                    tabIndex={0}
+                    className="cursor-pointer border-t border-slate-100 transition hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-900/50"
                     onClick={() => router.push(transactionDetailHref(tx.id))}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        router.push(transactionDetailHref(tx.id));
-                      }
-                    }}
-                    className="cursor-pointer border-white/10 border-b transition hover:bg-slate-50/80 last:border-0 dark:hover:bg-slate-800/50"
                   >
-                    <td className="py-2 font-medium">#{tx.id}</td>
+                    <td className="py-2 font-mono text-xs">#{tx.id}</td>
                     <td className="py-2">{tx.user_id}</td>
                     <td className="py-2">${tx.amount.toFixed(2)}</td>
                     <td className="py-2">{tx.location}</td>
-                    <td className={`py-2 ${tx.risk_score >= 80 ? "text-danger" : "text-warning"}`}>
+                    <td className="py-2 font-semibold text-red-600 dark:text-red-400">
                       {tx.risk_score.toFixed(1)}
                     </td>
                   </tr>
@@ -105,7 +146,7 @@ export default function TransactionsPage() {
             </table>
           </div>
           {!transactions.length ? (
-            <p className="text-soft mt-3 text-sm">No flagged transactions in the queue.</p>
+            <p className="text-soft mt-4 text-center text-sm">No flagged transactions right now.</p>
           ) : null}
         </div>
       </div>
@@ -122,15 +163,17 @@ function InfoTile({
 }: {
   label: string;
   value: string;
-  icon: typeof ShieldAlert;
+  icon: React.ComponentType<{ className?: string }>;
 }) {
   return (
-    <div className="glass-card p-4">
-      <div className="flex items-center gap-2 text-slate-300">
+    <div className="glass-card flex items-center gap-3 p-4">
+      <span className="icon-chip">
         <Icon className="h-4 w-4" />
-        <span className="text-xs">{label}</span>
+      </span>
+      <div>
+        <p className="text-soft text-xs">{label}</p>
+        <p className="text-lg font-semibold">{value}</p>
       </div>
-      <p className="mt-2 text-xl font-semibold">{value}</p>
     </div>
   );
 }

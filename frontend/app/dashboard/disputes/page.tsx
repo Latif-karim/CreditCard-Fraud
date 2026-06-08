@@ -7,28 +7,21 @@ import { ChevronRight, Scale } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { RoleGuard } from "@/components/role-guard";
 import { ListSkeleton } from "@/components/skeletons";
-import { fetchWithAuth, peekApiCache, postWithAuth } from "@/lib/api";
+import { fetchWithAuth, postWithAuth } from "@/lib/api";
+import { useHydrated } from "@/lib/use-hydrated";
 import { transactionDetailHref } from "@/lib/transaction-links";
 import type { DisputeCaseRow } from "@/lib/types";
 
 export default function DisputesPage() {
-  const [items, setItems] = useState<DisputeCaseRow[]>(() => {
-    if (typeof window === "undefined") return [];
-    const token = localStorage.getItem("access_token") || "";
-    return peekApiCache<DisputeCaseRow[]>("/disputes?status=open", token) ?? [];
-  });
-  const [loading, setLoading] = useState(() => {
-    if (typeof window === "undefined") return true;
-    const token = localStorage.getItem("access_token") || "";
-    return peekApiCache("/disputes?status=open", token) === null;
-  });
+  const hydrated = useHydrated();
+  const [items, setItems] = useState<DisputeCaseRow[]>([]);
+  const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [notice, setNotice] = useState("");
 
   const load = useCallback(async () => {
     const token = localStorage.getItem("access_token") || "";
-    const hasCache = peekApiCache("/disputes?status=open", token) !== null;
-    if (!hasCache) setLoading(true);
+    if (!token) return;
     try {
       const rows = await fetchWithAuth<DisputeCaseRow[]>("/disputes?status=open", token);
       setItems(rows);
@@ -40,8 +33,10 @@ export default function DisputesPage() {
   }, []);
 
   useEffect(() => {
+    if (!hydrated) return;
+    setLoading(true);
     void load();
-  }, [load]);
+  }, [hydrated, load]);
 
   const resolve = async (caseId: number, outcome: "approved" | "rejected") => {
     const token = localStorage.getItem("access_token") || "";
@@ -70,7 +65,7 @@ export default function DisputesPage() {
             {notice}
           </p>
         ) : null}
-        {loading ? (
+        {!hydrated || loading ? (
           <ListSkeleton items={4} />
         ) : (
           <div className="space-y-3">

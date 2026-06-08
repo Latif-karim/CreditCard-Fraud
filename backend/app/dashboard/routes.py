@@ -22,8 +22,10 @@ def _admin_only():
 def _cache_ttl(*, live: bool = False) -> float:
     if not current_app.config.get("CACHE_ENABLED", True):
         return 0.0
+    if live:
+        return 0.0
     base = float(current_app.config.get("CACHE_TTL_SECONDS", 30))
-    return max(base * 0.5, 5.0) if live else base
+    return base
 
 
 def _cached(key: str, ttl: float, builder):
@@ -40,7 +42,7 @@ def overview():
 
     role = current_role()
     uid = actor_user_id()
-    ttl = _cache_ttl()
+    ttl = _cache_ttl(live=True)
 
     def build():
         return compute_overview_stats()
@@ -207,7 +209,7 @@ def recent_transactions():
         return jsonify({"error": "Forbidden"}), 403
     role = current_role()
     uid = actor_user_id()
-    ttl = _cache_ttl()
+    ttl = _cache_ttl(live=True)
 
     def build():
         rows = scope_transactions(Transaction.query).order_by(Transaction.created_at.desc()).limit(12).all()

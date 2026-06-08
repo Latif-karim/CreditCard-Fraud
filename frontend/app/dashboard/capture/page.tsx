@@ -127,18 +127,16 @@ export default function CapturePage() {
       }
       const res = await postWithAuth<IngestResult>("/transactions/ingest", body, token);
       setLastResult(res);
-      if (role === "admin" || role === "analyst") {
-        notifyLocal({
-          id: res.transaction_id,
-          amount: Number(amount),
-          location,
-          merchant,
-          country,
-          status: res.status,
-          risk_score: res.risk_score ?? 0,
-          confidence: res.confidence ?? 0,
-        });
-      }
+      notifyLocal({
+        id: res.transaction_id,
+        amount: Number(amount),
+        location,
+        merchant,
+        country,
+        status: res.status,
+        risk_score: res.risk_score ?? 0,
+        confidence: res.confidence ?? 0,
+      });
       setMsg(
         role === "user"
           ? `Transaction #${res.transaction_id} · ${res.customer_status || res.status} · score ${(res.risk_score ?? 0).toFixed(1)} · ML ${((res.confidence ?? 0) * 100).toFixed(1)}%`

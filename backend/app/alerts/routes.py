@@ -9,8 +9,10 @@ from ..services.rbac import actor_user_id, is_staff
 alerts_bp = Blueprint("alerts", __name__, url_prefix="/alerts")
 
 
-def _cache_ttl() -> float:
+def _cache_ttl(*, live: bool = False) -> float:
     if not current_app.config.get("CACHE_ENABLED", True):
+        return 0.0
+    if live:
         return 0.0
     return float(current_app.config.get("CACHE_TTL_SECONDS", 30))
 
@@ -69,7 +71,7 @@ def notifications():
     if uid is None:
         return jsonify({"error": "Invalid session"}), 401
     staff = is_staff()
-    ttl = _cache_ttl()
+    ttl = _cache_ttl(live=True)
 
     def build():
         query = FraudNotification.query

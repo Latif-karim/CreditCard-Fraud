@@ -5,8 +5,10 @@ import { LayoutDashboard, LogIn, LogOut, Shield } from "lucide-react";
 
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useClientSession } from "@/lib/use-client-session";
+import { useHydrated } from "@/lib/use-hydrated";
 
 export function LandingNav() {
+  const hydrated = useHydrated();
   const { loggedIn, logout } = useClientSession();
 
   return (
@@ -34,7 +36,9 @@ export function LandingNav() {
         </nav>
         <div className="flex items-center gap-2 sm:gap-3">
           <ThemeToggle variant="ghost" />
-          {loggedIn ? (
+          {!hydrated ? (
+            <span className="inline-block h-9 w-24 shrink-0 rounded-lg bg-slate-200/60 dark:bg-slate-800/60" aria-hidden />
+          ) : loggedIn ? (
             <>
               <Link
                 href="/dashboard"

@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import {
   Activity,
   AlertTriangle,
@@ -51,6 +51,14 @@ import { KpiCard } from "@/components/kpi-card";
 import { RiskHeatmap } from "@/components/risk-heatmap";
 import { ScrollReveal } from "@/components/scroll-reveal";
 import { fetchWithAuth, peekApiCache, postWithAuth } from "@/lib/api";
+import {
+  applyCreatedToOverview,
+  toFlaggedTransaction,
+  toLiveActivityItem,
+  toRecentTx,
+  type LiveStreamEvent,
+} from "@/lib/live-updates";
+import { useLiveEvent } from "@/lib/use-live-event";
 import type {
   AuditLog,
   DashboardOverview,
@@ -72,11 +80,6 @@ type RecentTx = {
   merchant?: string | null;
   customer_status?: string;
 };
-
-function bootstrapToken(): string {
-  if (typeof window === "undefined") return "";
-  return localStorage.getItem("access_token") || "";
-}
 
 function dashboardHasCache(token: string): boolean {
   return peekApiCache("/dashboard/overview", token) !== null;
@@ -123,123 +126,154 @@ export default function DashboardPage() {
   const role = useUserRole();
   const isStaff = hydrated && (role === "analyst" || role === "admin");
   const queueHref = fraudQueueHref(role);
-  const [overview, setOverview] = useState<DashboardOverview | null>(() => {
-    const token = bootstrapToken();
-    return token ? peekApiCache<DashboardOverview>("/dashboard/overview", token) : null;
-  });
-  const [trends, setTrends] = useState<TrendResponse | null>(() => {
-    const token = bootstrapToken();
-    return token ? peekApiCache<TrendResponse>("/dashboard/trends", token) : null;
-  });
-  const [flagged, setFlagged] = useState<FlaggedTransaction[]>(() => {
-    const token = bootstrapToken();
-    return token ? peekApiCache<FlaggedTransaction[]>("/transactions/flagged", token) ?? [] : [];
-  });
-  const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => {
-    const token = bootstrapToken();
-    return token ? peekApiCache<AuditLog[]>("/dashboard/audit-logs", token)?.slice(0, 6) ?? [] : [];
-  });
-  const [region, setRegion] = useState<LabelValueResponse | null>(() => {
-    const token = bootstrapToken();
-    return token ? peekApiCache<LabelValueResponse>("/dashboard/fraud-by-region", token) : null;
-  });
-  const [cardType, setCardType] = useState<LabelValueResponse | null>(() => {
-    const token = bootstrapToken();
-    return token ? peekApiCache<LabelValueResponse>("/dashboard/fraud-by-card", token) : null;
-  });
-  const [heatmap, setHeatmap] = useState<HeatmapResponse | null>(() => {
-    const token = bootstrapToken();
-    return token ? peekApiCache<HeatmapResponse>("/dashboard/heatmap", token) : null;
-  });
-  const [recent, setRecent] = useState<RecentTx[]>(() => {
-    const token = bootstrapToken();
-    return token ? peekApiCache<RecentTx[]>("/dashboard/recent-transactions", token) ?? [] : [];
-  });
-  const [live, setLive] = useState<LiveActivityItem[]>(() => {
-    const token = bootstrapToken();
-    return token ? peekApiCache<LiveActivityItem[]>("/dashboard/live-activity", token) ?? [] : [];
-  });
-  const [notifications, setNotifications] = useState<FraudNotification[]>(() => {
-    const token = bootstrapToken();
-    return token ? peekApiCache<FraudNotification[]>("/alerts/notifications", token) ?? [] : [];
-  });
-  const [modelMetrics, setModelMetrics] = useState<Record<string, unknown> | null>(() => {
-    const token = bootstrapToken();
-    return token ? peekApiCache<Record<string, unknown>>("/dashboard/model-metrics", token) : null;
-  });
-  const [loading, setLoading] = useState(() => !dashboardHasCache(bootstrapToken()));
+  const [overview, setOverview] = useState<DashboardOverview | null>(null);
+  const [trends, setTrends] = useState<TrendResponse | null>(null);
+  const [flagged, setFlagged] = useState<FlaggedTransaction[]>([]);
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+  const [region, setRegion] = useState<LabelValueResponse | null>(null);
+  const [cardType, setCardType] = useState<LabelValueResponse | null>(null);
+  const [heatmap, setHeatmap] = useState<HeatmapResponse | null>(null);
+  const [recent, setRecent] = useState<RecentTx[]>([]);
+  const [live, setLive] = useState<LiveActivityItem[]>([]);
+  const [notifications, setNotifications] = useState<FraudNotification[]>([]);
+  const [modelMetrics, setModelMetrics] = useState<Record<string, unknown> | null>(null);
+  const [loading, setLoading] = useState(true);
   const [disputeBusy, setDisputeBusy] = useState<number | null>(null);
   const [disputeNotice, setDisputeNotice] = useState("");
+
+  const loadDashboard = useCallback(async () => {
+    if (!hydrated || !role) return;
+    const token = localStorage.getItem("access_token") || "";
+    setDisputeNotice("");
+
+    if (role === "user") {
+      const [overviewRes, recentRes, liveRes, notifsRes] = await Promise.all([
+        fetchWithAuth<DashboardOverview>("/dashboard/overview", token).catch(() => null),
+        fetchWithAuth<RecentTx[]>("/dashboard/recent-transactions", token).catch(() => []),
+        fetchWithAuth<LiveActivityItem[]>("/dashboard/live-activity", token).catch(() => []),
+        fetchWithAuth<FraudNotification[]>("/alerts/notifications", token).catch(() => []),
+      ]);
+      setOverview(overviewRes);
+      setRecent(recentRes ?? []);
+      setLive(liveRes ?? []);
+      setNotifications(notifsRes ?? []);
+      setFlagged([]);
+      setAuditLogs([]);
+      setRegion(null);
+      setCardType(null);
+      setHeatmap(null);
+      setModelMetrics(null);
+      setLoading(false);
+      return;
+    }
+
+    const [
+      overviewRes,
+      trendsRes,
+      flaggedRes,
+      auditRes,
+      regionRes,
+      cardRes,
+      heatmapRes,
+      recentRes,
+      liveRes,
+      metricsRes,
+    ] = await Promise.all([
+      fetchWithAuth<DashboardOverview>("/dashboard/overview", token).catch(() => null),
+      fetchWithAuth<TrendResponse>("/dashboard/trends", token).catch(() => null),
+      fetchWithAuth<FlaggedTransaction[]>("/transactions/flagged", token).catch(() => []),
+      isStaff
+        ? fetchWithAuth<AuditLog[]>("/dashboard/audit-logs", token).catch(() => [])
+        : Promise.resolve([] as AuditLog[]),
+      fetchWithAuth<LabelValueResponse>("/dashboard/fraud-by-region", token).catch(() => null),
+      fetchWithAuth<LabelValueResponse>("/dashboard/fraud-by-card", token).catch(() => null),
+      fetchWithAuth<HeatmapResponse>("/dashboard/heatmap", token).catch(() => null),
+      fetchWithAuth<RecentTx[]>("/dashboard/recent-transactions", token).catch(() => []),
+      fetchWithAuth<LiveActivityItem[]>("/dashboard/live-activity", token).catch(() => []),
+      fetchWithAuth<Record<string, unknown>>("/dashboard/model-metrics", token).catch(() => null),
+    ]);
+
+    setOverview(overviewRes);
+    setTrends(trendsRes);
+    setFlagged((flaggedRes ?? []).slice(0, 6));
+    setAuditLogs((auditRes ?? []).slice(0, 6));
+    setRegion(regionRes);
+    setCardType(cardRes);
+    setHeatmap(heatmapRes);
+    setRecent(recentRes ?? []);
+    setLive(liveRes ?? []);
+    setModelMetrics(metricsRes);
+    setLoading(false);
+  }, [hydrated, isStaff, role]);
 
   useEffect(() => {
     if (!hydrated || !role) return;
     const token = localStorage.getItem("access_token") || "";
-    const load = async () => {
-      const showSkeleton = !dashboardHasCache(token);
-      if (showSkeleton) setLoading(true);
-      setDisputeNotice("");
-
-      if (role === "user") {
-        const [overviewRes, recentRes, liveRes, notifsRes] = await Promise.all([
-          fetchWithAuth<DashboardOverview>("/dashboard/overview", token).catch(() => null),
-          fetchWithAuth<RecentTx[]>("/dashboard/recent-transactions", token).catch(() => []),
-          fetchWithAuth<LiveActivityItem[]>("/dashboard/live-activity", token).catch(() => []),
-          fetchWithAuth<FraudNotification[]>("/alerts/notifications", token).catch(() => []),
-        ]);
-        setOverview(overviewRes);
-        setRecent(recentRes ?? []);
-        setLive(liveRes ?? []);
-        setNotifications(notifsRes ?? []);
-        setFlagged([]);
-        setAuditLogs([]);
-        setRegion(null);
-        setCardType(null);
-        setHeatmap(null);
-        setModelMetrics(null);
-        setLoading(false);
-        return;
-      }
-
-      const [
-        overviewRes,
-        trendsRes,
-        flaggedRes,
-        auditRes,
-        regionRes,
-        cardRes,
-        heatmapRes,
-        recentRes,
-        liveRes,
-        metricsRes,
-      ] = await Promise.all([
-        fetchWithAuth<DashboardOverview>("/dashboard/overview", token).catch(() => null),
-        fetchWithAuth<TrendResponse>("/dashboard/trends", token).catch(() => null),
-        fetchWithAuth<FlaggedTransaction[]>("/transactions/flagged", token).catch(() => []),
-        isStaff
-          ? fetchWithAuth<AuditLog[]>("/dashboard/audit-logs", token).catch(() => [])
-          : Promise.resolve([] as AuditLog[]),
-        fetchWithAuth<LabelValueResponse>("/dashboard/fraud-by-region", token).catch(() => null),
-        fetchWithAuth<LabelValueResponse>("/dashboard/fraud-by-card", token).catch(() => null),
-        fetchWithAuth<HeatmapResponse>("/dashboard/heatmap", token).catch(() => null),
-        fetchWithAuth<RecentTx[]>("/dashboard/recent-transactions", token).catch(() => []),
-        fetchWithAuth<LiveActivityItem[]>("/dashboard/live-activity", token).catch(() => []),
-        fetchWithAuth<Record<string, unknown>>("/dashboard/model-metrics", token).catch(() => null),
-      ]);
-
-      setOverview(overviewRes);
-      setTrends(trendsRes);
-      setFlagged((flaggedRes ?? []).slice(0, 6));
-      setAuditLogs((auditRes ?? []).slice(0, 6));
-      setRegion(regionRes);
-      setCardType(cardRes);
-      setHeatmap(heatmapRes);
-      setRecent(recentRes ?? []);
-      setLive(liveRes ?? []);
-      setModelMetrics(metricsRes);
+    const hasCache = dashboardHasCache(token);
+    if (hasCache) {
+      setOverview(peekApiCache<DashboardOverview>("/dashboard/overview", token));
+      setTrends(peekApiCache<TrendResponse>("/dashboard/trends", token));
+      setFlagged(peekApiCache<FlaggedTransaction[]>("/transactions/flagged", token) ?? []);
+      setAuditLogs(peekApiCache<AuditLog[]>("/dashboard/audit-logs", token)?.slice(0, 6) ?? []);
+      setRegion(peekApiCache<LabelValueResponse>("/dashboard/fraud-by-region", token));
+      setCardType(peekApiCache<LabelValueResponse>("/dashboard/fraud-by-card", token));
+      setHeatmap(peekApiCache<HeatmapResponse>("/dashboard/heatmap", token));
+      setRecent(peekApiCache<RecentTx[]>("/dashboard/recent-transactions", token) ?? []);
+      setLive(peekApiCache<LiveActivityItem[]>("/dashboard/live-activity", token) ?? []);
+      setNotifications(peekApiCache<FraudNotification[]>("/alerts/notifications", token) ?? []);
+      setModelMetrics(peekApiCache<Record<string, unknown>>("/dashboard/model-metrics", token));
       setLoading(false);
-    };
-    void load();
-  }, [hydrated, isStaff, role]);
+    } else {
+      setLoading(true);
+    }
+    void loadDashboard();
+  }, [hydrated, role, loadDashboard]);
+
+  useLiveEvent(
+    useCallback(
+      (event: LiveStreamEvent) => {
+        if (event.type === "transaction.created") {
+          const tx = event.transaction;
+          setOverview((prev) => applyCreatedToOverview(prev ?? EMPTY_OVERVIEW, tx));
+          setRecent((prev) => {
+            if (prev.some((r) => r.id === tx.id)) return prev;
+            return [toRecentTx(tx), ...prev].slice(0, 12);
+          });
+          setLive((prev) => [toLiveActivityItem(tx), ...prev].slice(0, 8));
+          if (event.notification) {
+            setNotifications((prev) => {
+              if (prev.some((n) => n.id === event.notification!.id)) return prev;
+              return [event.notification!, ...prev].slice(0, 20);
+            });
+          }
+          if (isStaff && tx.status === "flagged") {
+            setFlagged((prev) => {
+              if (prev.some((f) => f.id === tx.id)) return prev;
+              return [toFlaggedTransaction(tx), ...prev].slice(0, 6);
+            });
+          }
+          return;
+        }
+        if (event.type === "transaction.updated") {
+          const tx = event.transaction;
+          setRecent((prev) => prev.map((r) => (r.id === tx.id ? { ...r, ...toRecentTx(tx) } : r)));
+          if (isStaff) {
+            setFlagged((prev) => {
+              if (tx.status === "flagged") {
+                if (prev.some((f) => f.id === tx.id)) {
+                  return prev.map((f) => (f.id === tx.id ? toFlaggedTransaction(tx) : f));
+                }
+                return [toFlaggedTransaction(tx), ...prev].slice(0, 6);
+              }
+              return prev.filter((f) => f.id !== tx.id);
+            });
+          }
+        }
+      },
+      [isStaff]
+    ),
+    hydrated && !!role
+  );
 
   const view = overview ?? EMPTY_OVERVIEW;
   const customerView = overview ?? EMPTY_OVERVIEW;
@@ -304,7 +338,7 @@ export default function DashboardPage() {
           ? "Analyst command center"
           : "Command center";
 
-  if (loading) {
+  if (!hydrated || loading) {
     return (
       <AppShell title={role === "user" ? "Cardholder dashboard" : "Operations dashboard"} subtitle={subtitle}>
         <div className="space-y-5">
