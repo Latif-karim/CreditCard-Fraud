@@ -293,7 +293,7 @@ export default function AdminPage() {
                 Pending requests
               </h3>
               <p className="text-soft mb-3 text-xs">
-                Analyst and admin registrations stay locked until an existing administrator reviews them.
+                Analyst and administrator access requests (from registration or profile) appear here until reviewed.
               </p>
               {pendingRequests.length ? (
                 <div className="overflow-x-auto">

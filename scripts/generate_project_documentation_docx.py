@@ -1,7 +1,5 @@
 """
-Generate CS4-format comprehensive project documentation as Microsoft Word (.docx).
-Follows Department of Computer Science project documentation guidelines.
-
+Generate CS4-format project documentation as Microsoft Word (.docx).
 Run: python scripts/generate_project_documentation_docx.py
 Output: FraudShield-Project-Documentation.docx (repo root)
 """
@@ -67,26 +65,20 @@ def add_abstract(doc: Document) -> None:
     h1(doc, "Abstract")
     para(
         doc,
-        "Credit card fraud remains a major threat to financial institutions, merchants, and consumers. "
-        "Existing detection systems often rely on either rigid rule-based engines that generate excessive "
-        "false positives, or opaque machine learning models that lack interpretability for investigators. "
-        "This project presents FraudShield, a full-stack web platform that combines deterministic rules, "
-        "behavioral profiling, and scikit-learn machine learning into a unified 0–100 risk score, delivered "
-        "through a secure, role-based operations console built with Flask and Next.js.",
+        "Online card payments are convenient but they expose banks and customers to fraud. Many detection "
+        "tools rely either on fixed rules that block too many genuine purchases, or on machine learning models "
+        "that analysts cannot easily interpret. FraudShield is a web application built for this project that "
+        "combines rules, spending-profile checks, and a scikit-learn classifier. Each transaction receives a "
+        "risk score from 0 to 100 and is stored with a full breakdown of why that score was assigned.",
     )
     para(
         doc,
-        "The system supports three personas—cardholder, fraud analyst, and administrator—each with scoped "
-        "access to transactions, dashboards, dispute resolution, explainability views, and exportable reports. "
-        "Transactions are ingested via manual capture, REST API, or a live simulator; each ingest triggers "
-        "hybrid scoring, persistence to PostgreSQL (Neon), audit logging, and optional alert notifications. "
-        "Evaluation using seeded realistic demo data demonstrates effective flagging of high-risk patterns, "
-        "sub-second to low-second API latency depending on hosting, and successful role-based data isolation.",
-    )
-    para(
-        doc,
-        "Keywords: credit card fraud detection, hybrid scoring, machine learning, Flask, Next.js, "
-        "role-based access control, explainable AI, financial technology.",
+        "The system was implemented with a Flask API and a Next.js dashboard. Three user roles are supported: "
+        "cardholder, fraud analyst, and administrator. Analysts can monitor transactions, review flagged cases, "
+        "resolve disputes, and export reports. Open dashboard tabs receive new transactions through a "
+        "Server-Sent Events stream rather than periodic page reloads. The database runs on PostgreSQL "
+        "(hosted on Neon during development). Testing with seeded demo data showed that obvious fraud "
+        "patterns are flagged correctly and that each role only sees the data it is permitted to view.",
     )
     doc.add_page_break()
 
@@ -95,22 +87,16 @@ def add_acknowledgements(doc: Document) -> None:
     h1(doc, "Acknowledgements")
     para(
         doc,
-        "I would like to express my sincere gratitude to my project supervisor for their guidance, "
-        "constructive feedback, and encouragement throughout the development of FraudShield. I also "
-        "thank the faculty and staff of the Department of Computer Science for providing the academic "
-        "foundation and resources that made this work possible. Finally, I acknowledge my peers and "
-        "family for their support during the research, implementation, and testing phases of this project.",
+        "I wish to thank my project supervisor for the guidance and feedback given at each review meeting. "
+        "Thanks also to the lecturers and technical staff in the Department of Computer Science for the "
+        "coursework foundation that made this implementation possible. Finally, I thank my colleagues and "
+        "family for their patience during the development and testing period.",
     )
     doc.add_page_break()
 
 
 def add_toc_placeholder(doc: Document) -> None:
     h1(doc, "Table of Contents")
-    para(
-        doc,
-        "Note: In Microsoft Word, update this table by right-clicking and selecting "
-        "'Update Field' after opening the document, or use References → Table of Contents.",
-    )
     for entry in [
         "Chapter 1: Introduction",
         "Chapter 2: Review of Related Works",
@@ -185,66 +171,59 @@ def chapter1(doc: Document) -> None:
     h2(doc, "Problem Statement")
     para(
         doc,
-        "Credit card fraud causes billions of dollars in losses annually and erodes consumer trust in "
-        "digital payments. Financial institutions must detect suspicious transactions quickly while "
-        "minimising false positives that block legitimate purchases. Many organisations still depend on "
-        "manual review queues, legacy rule-only engines, or proprietary black-box scoring services that "
-        "are expensive, inflexible, or difficult to audit.",
+        "Credit card fraud remains a major cost for banks and a source of stress for customers. "
+        "Institutions must spot suspicious payments quickly without blocking everyday purchases. "
+        "Many still rely on manual review queues, simple rule engines, or paid scoring services that "
+        "are hard to audit or adapt.",
     )
     para(
         doc,
-        "Small and medium institutions, as well as academic environments, lack integrated platforms that "
-        "combine real-time hybrid scoring (rules + behavior + machine learning), explainable decisions, "
-        "dispute workflows, role-based dashboards, and exportable compliance evidence in one cohesive "
-        "system. FraudShield addresses this gap by delivering a web-based fraud detection platform that "
-        "ingests transactions, computes transparent risk scores, stores audit trails, and supports "
-        "cardholders, analysts, and administrators through dedicated interfaces.",
+        "For teaching and small-scale pilots there is often no single open system that combines "
+        "rule checks, spending-profile analysis, machine learning, explainable scores, dispute handling, "
+        "and role-based dashboards. FraudShield was built to fill that gap: a web application that "
+        "accepts transactions, assigns a transparent risk score, keeps an audit trail, and serves "
+        "cardholders, analysts, and administrators through separate views.",
     )
 
     h2(doc, "Aim of the Project")
     para(
         doc,
-        "The aim of this project is to design, implement, and evaluate FraudShield—a full-stack credit "
-        "card fraud detection system that scores transactions in near real time using a hybrid intelligence "
-        "pipeline, and presents results through a secure, role-based web application suitable for "
-        "demonstration, academic assessment, and future production extension.",
+        "The aim is to design and build FraudShield—a full-stack fraud detection application that "
+        "scores transactions using rules, behaviour checks, and a trained classifier, then presents "
+        "the results in a secure web dashboard suitable for demonstration and further development.",
     )
 
     h2(doc, "Specific Objectives of the Project")
     bullets(
         doc,
         [
-            "To develop a RESTful Flask backend API for authentication, transaction ingestion, fraud scoring, and reporting.",
-            "To implement a hybrid fraud engine combining deterministic rules, user behavioral profiles, and ML probability.",
-            "To train and integrate a scikit-learn classification model serialized as a joblib artifact for inference.",
-            "To design a normalised PostgreSQL relational schema for users, transactions, decisions, disputes, alerts, and audit logs.",
-            "To build a responsive Next.js 14 dashboard with KPIs, monitoring, explainability, disputes, and admin tools.",
-            "To enforce role-based access control (RBAC) for cardholder, analyst, and administrator personas.",
-            "To provide exportable reports (CSV, PDF, JSON), in-app notifications, and optional OAuth social login.",
-            "To document requirements, UML models, testing evidence, and results in accordance with CS project guidelines.",
+            "Build a Flask REST API for login, transaction intake, scoring, and reporting.",
+            "Combine rule checks, user spending profiles, and ML output into one risk score.",
+            "Train a scikit-learn model on public fraud data and load it for live scoring.",
+            "Design a PostgreSQL schema for users, transactions, decisions, disputes, and audit logs.",
+            "Develop a Next.js dashboard with monitoring, explainability, and admin tools.",
+            "Restrict pages and API data by role (cardholder, analyst, admin).",
+            "Allow export of transaction data as CSV, PDF, and JSON.",
+            "Produce this report with requirements, diagrams, test notes, and results.",
         ],
     )
 
     h2(doc, "Justification of Project")
     para(
         doc,
-        "Electronic payment volumes continue to grow while fraud techniques evolve (card-not-present fraud, "
-        "account takeover, velocity attacks). Institutions need systems that balance automation with human "
-        "oversight and regulatory explainability. A dedicated academic implementation enables controlled "
-        "experimentation with scoring logic, reproducible datasets, and full traceability—requirements "
-        "difficult to evaluate on closed commercial products. The project demonstrates that a modular, "
-        "explainable, extensible architecture can be built with mainstream open-source tools within a "
-        "final-year timeline.",
+        "Payment volumes keep growing while fraud tactics change (card-not-present abuse, account takeover, "
+        "rapid small purchases). Banks need automation that analysts can still understand and challenge. "
+        "Building the system from scratch allowed controlled experiments with scoring logic, seeded data, "
+        "and full traceability—things that are difficult to study on closed commercial products.",
     )
 
     h2(doc, "Motivation for Undertaking Project")
     para(
         doc,
-        "Motivation stems from interest in financial technology, applied machine learning for security, "
-        "and full-stack software engineering. Observing how banks flag unusual spending patterns led to "
-        "investigation of how rules and statistical models complement each other. The project strengthens "
-        "competencies in API design, database modelling, JWT security, data visualisation, and Agile "
-        "delivery—skills valued in fintech and software engineering careers.",
+        "I have followed several cases of unauthorised card use in the news and wanted to understand how "
+        "software can detect such activity before large losses occur. The project also gave practical "
+        "experience in building an API, connecting a database, training a simple model, and shipping a "
+        "working interface—skills that apply directly to fintech and general software jobs.",
     )
 
     h2(doc, "Scope of Project")
@@ -256,6 +235,8 @@ def chapter1(doc: Document) -> None:
             "Transaction ingestion via manual form, REST API, background simulator, and admin reseed.",
             "Hybrid fraud scoring with persisted FraudDecision records and UserProfile updates.",
             "Dashboard modules: overview, monitoring, capture, flagged queue, disputes, fraud lab, explainability, analytics, alerts, reports, admin, profile.",
+            "Live dashboard updates via Server-Sent Events when new transactions are ingested.",
+            "Cardholders may request analyst or admin access; admins approve or reject from the console.",
             "PostgreSQL database (Neon cloud or local) with Flask-Migrate schema management.",
             "JWT authentication, session cookie for Next.js middleware, and three application roles.",
         ],
@@ -298,10 +279,9 @@ def chapter1(doc: Document) -> None:
     h2(doc, "Academic and Practical Relevance of the Project")
     para(
         doc,
-        "Academically, the project applies the software engineering lifecycle, UML modelling, hybrid "
-        "intelligent systems, security design, and empirical testing. Practically, it produces a working "
-        "prototype extendable into a pilot system by adding payment webhooks, hardened DevOps, PCI-DSS "
-        "assessment, and production monitoring.",
+        "The work applies the software engineering lifecycle—requirements, UML, implementation, and testing—"
+        "to a problem that mixes security and machine learning. The finished prototype could be extended "
+        "with payment webhooks, stronger hosting, and formal compliance review if taken beyond the classroom.",
     )
 
     h2(doc, "Project Activity Planning and Schedules")
@@ -321,11 +301,10 @@ def chapter1(doc: Document) -> None:
     h2(doc, "Structure of Report")
     para(
         doc,
-        "Chapter 1 introduces the problem, objectives, scope, and deliverables. Chapter 2 reviews related "
-        "systems and presents the proposed architecture with component descriptions and diagrams. Chapter 3 "
-        "covers methodology, requirements, UML models, security, process model, and logical designs. "
-        "Chapter 4 describes implementation mapping, algorithms, construction evidence, testing, and results. "
-        "Chapter 5 concludes with findings, limitations, lessons learned, future work, and commercialisation.",
+        "Chapter 1 states the problem, objectives, and scope. Chapter 2 compares existing approaches and "
+        "describes the FraudShield architecture. Chapter 3 covers requirements, UML models, security, and "
+        "design. Chapter 4 explains how the system was built and tested. Chapter 5 summarises outcomes, "
+        "limitations, and possible next steps.",
     )
 
     h2(doc, "Project Deliverables")
@@ -335,7 +314,7 @@ def chapter1(doc: Document) -> None:
             "FraudShield web application (frontend and backend source code in this repository).",
             "PostgreSQL database schema with Flask-Migrate migrations and realistic seed data.",
             "Trained ML artifact (fraud_model.joblib) and training script.",
-            "This comprehensive project documentation (Word format).",
+            "This project documentation (Word format).",
             "Operational manual and demo credentials (README.md, DEFENSE.md).",
             "Generated UML and architecture diagrams embedded in this report.",
             "Test evidence and sample exported reports (CSV, PDF, JSON).",
@@ -351,51 +330,48 @@ def chapter2(doc: Document, diagrams: dict[str, Path]) -> None:
     h3(doc, "Traditional manual review")
     para(
         doc,
-        "In many institutions, flagged transactions are reviewed by analysts using spreadsheets and "
-        "disconnected case tools. Features include case notes and phone verification. Advantages: human "
-        "judgment on edge cases. Disadvantages: slow throughput, high labour cost, poor scalability, "
-        "limited automated audit trails.",
+        "Analysts work from spreadsheets or separate case tools, calling customers to verify unusual "
+        "charges. This works for ambiguous cases but does not scale: queues grow quickly, labour cost "
+        "is high, and audit trails are often incomplete.",
     )
     h3(doc, "Rule-only engines")
     para(
         doc,
-        "Authorisation systems apply hard thresholds (amount limits, velocity counts, country blocks). "
-        "Advantages: fast, interpretable, easy to configure. Disadvantages: high false-positive rates, "
-        "difficulty adapting to individual spending patterns, no personalised behavioral baselines.",
+        "Authorisation systems apply fixed thresholds—amount limits, velocity counts, country blocks. "
+        "Rules are fast and easy to explain, but they generate many false alarms and cannot easily "
+        "reflect how an individual customer normally spends.",
     )
     h3(doc, "ML-only black-box scoring")
     para(
         doc,
-        "Modern vendors use gradient boosting, random forests, or neural networks on large labelled datasets. "
-        "Advantages: strong accuracy on historical patterns. Disadvantages: limited explainability, "
-        "regulatory challenges, cold-start problems, dependency on large labelled data volumes.",
+        "Vendors train gradient boosting or neural networks on large labelled datasets. Accuracy on "
+        "historical data can be strong, but analysts may not see why a score was assigned, regulators "
+        "may ask for justification, and new merchants or users start with little history.",
     )
     h3(doc, "Commercial fraud platforms")
     para(
         doc,
-        "Enterprise suites (e.g. FICO Falcon-class, SAS Fraud Management, Feedzai) offer end-to-end case "
-        "management, graph analytics, and model operations. Advantages: mature, scalable, compliance-ready. "
-        "Disadvantages: costly licences, closed source, long integration cycles—not feasible for an "
-        "academic prototype budget.",
+        "Enterprise products (for example FICO Falcon-class systems, SAS Fraud Management, Feedzai) "
+        "bundle case management, analytics, and model operations. They are mature but expensive, "
+        "closed-source, and slow to integrate—outside the budget and timeline of a final-year build.",
     )
 
     h2(doc, "The Proposed System")
     para(
         doc,
-        "FraudShield proposes a hybrid, explainable, web-accessible platform: deterministic rules plus "
-        "behavioral profiling plus ML probability, fused into a 0–100 risk score, with JWT-secured "
-        "role-based UI, dispute resolution workflow, admin rule toggles wired to the live engine, and "
-        "comprehensive audit logging.",
+        "FraudShield combines rules, spending-profile checks, and ML probability into a single 0–100 "
+        "risk score. A Flask API stores every decision with a component breakdown. A Next.js dashboard "
+        "enforces role-based access, supports dispute resolution, lets admins toggle rules in the live "
+        "engine, and records audit entries for sensitive actions.",
     )
 
     h2(doc, "Conceptual Design")
     para(
         doc,
-        "Conceptually, the system is organised into four layers: (1) Presentation—Next.js pages and "
-        "components; (2) Application/API—Flask blueprints and route handlers; (3) Domain Services—scoring, "
-        "ingest, RBAC, caching, simulator, reports; (4) Data—SQLAlchemy models backed by PostgreSQL. "
-        "External actors interact only with the presentation layer; all business logic and scoring execute "
-        "on the server to protect models and enforce authorisation.",
+        "The system has four layers. The presentation layer (Next.js pages) talks only to the API. "
+        "Flask route handlers receive requests and call domain services for scoring, ingest, RBAC, "
+        "caching, and reports. SQLAlchemy maps data to PostgreSQL tables. Scoring logic stays on the "
+        "server so models and authorisation rules are not exposed in the browser.",
     )
 
     h2(doc, "Architecture of the Proposed System")
@@ -474,7 +450,8 @@ def chapter2(doc: Document, diagrams: dict[str, Path]) -> None:
             ["Monitoring & flagged queue", "Search, filter, approve/flag/freeze actions"],
             ["Disputes workflow", "Open, review, resolve cardholder disputes"],
             ["Dashboard analytics", "KPI cards, line/bar charts, heatmap, activity feed"],
-            ["Alerts & notifications", "In-app feed, toast/sound on new transactions"],
+            ["Alerts & notifications", "In-app feed; SSE push when new transactions arrive"],
+            ["Role access requests", "Cardholders request analyst/admin role; admin approves or rejects"],
             ["Reports", "CSV, PDF, JSON exports for auditors"],
             ["Admin console", "Users, rules, reseed, model ops stub"],
         ],
@@ -499,12 +476,11 @@ def chapter2(doc: Document, diagrams: dict[str, Path]) -> None:
     bullets(
         doc,
         [
-            "Faster detection through automated hybrid scoring on every ingest.",
-            "Improved analyst efficiency via prioritised flagged queue, explainability, and disputes.",
-            "Transparent decisions with stored rule/behavior/ML breakdown per transaction.",
-            "Lower cost than enterprise suites for teaching, research, and pilot deployment.",
-            "Extensible modular codebase for future payment webhook integration.",
-            "Cloud-ready PostgreSQL supports realistic deployment scenarios beyond local SQLite demos.",
+            "Every ingest receives an automated hybrid score without waiting for manual review.",
+            "Analysts work from a prioritised queue with explainability and dispute tools.",
+            "Each decision stores rule, behaviour, and ML contributions for later review.",
+            "Open-source stack keeps cost low for teaching and pilot use.",
+            "Modular code allows payment webhook integration in a later phase.",
         ],
     )
 
@@ -512,14 +488,6 @@ def chapter2(doc: Document, diagrams: dict[str, Path]) -> None:
 def chapter3(doc: Document, diagrams: dict[str, Path]) -> None:
     doc.add_page_break()
     h1(doc, "Chapter 3: Methodology")
-
-    h2(doc, "Chapter Overview")
-    para(
-        doc,
-        "This chapter presents requirements engineering, stakeholders, functional and non-functional "
-        "requirements, UML models with diagrams, security design, the chosen Agile process model, and "
-        "logical designs including UI wireframes and database schema.",
-    )
 
     h2(doc, "Requirement Specification")
     h3(doc, "Stakeholders of System")
@@ -538,10 +506,9 @@ def chapter3(doc: Document, diagrams: dict[str, Path]) -> None:
     h3(doc, "Requirement Gathering Process")
     para(
         doc,
-        "Requirements were gathered through: (1) review of fraud detection literature and industry reports; "
-        "(2) analysis of commercial platform feature sets; (3) supervisor consultation; (4) iterative "
-        "prototyping with demo scenarios (manual ingest, simulator, role-based navigation, dispute flows); "
-        "(5) feedback from test users using seeded demo accounts.",
+        "Requirements came from reading fraud-detection papers, inspecting features in commercial products, "
+        "meetings with my supervisor, and trying early prototypes (manual transaction entry, the live "
+        "simulator, and role-based menus). Demo accounts were used to confirm that each role behaved as expected.",
     )
 
     h3(doc, "Functional Requirements")
@@ -562,6 +529,8 @@ def chapter3(doc: Document, diagrams: dict[str, Path]) -> None:
             ["FR11", "System shall export CSV, PDF, and JSON reports"],
             ["FR12", "Cardholders shall only access their own transaction and dispute data"],
             ["FR13", "Staff shall run live transaction simulator and reseed demo data"],
+            ["FR14", "Cardholders shall request analyst or admin role upgrade; admins shall approve or reject"],
+            ["FR15", "Dashboard shall receive live transaction updates via SSE without full page reload"],
         ],
     )
 
@@ -623,19 +592,17 @@ def chapter3(doc: Document, diagrams: dict[str, Path]) -> None:
     h3(doc, "Software Process Models (Brief)")
     para(
         doc,
-        "Waterfall: sequential phases with rigid change control—suitable when requirements are fully known. "
-        "Agile: iterative delivery with frequent feedback—suitable for evolving prototypes. Spiral: "
-        "risk-driven iterations with explicit risk analysis. V-Model: each design phase paired with testing. "
-        "DevOps: continuous integration, delivery, and operational monitoring.",
+        "Waterfall suits fixed requirements; Agile suits changing prototypes; Spiral emphasises risk "
+        "review each cycle; V-Model pairs each design step with a test; DevOps adds continuous deployment "
+        "and monitoring. None of these was followed strictly—elements of Agile fit the academic schedule best.",
     )
     h3(doc, "Chosen Model and Justification")
     para(
         doc,
-        "An Agile-inspired iterative approach was adopted: backend API and database first, then ML "
-        "integration, then frontend modules delivered in vertical slices (auth → dashboard → capture → "
-        "disputes → admin). Justification: requirements evolved during prototyping (RBAC scoping, "
-        "notifications, Neon migration, bulk seed optimisation); Agile allowed reprioritisation without "
-        "full waterfall rework; two-week sprints mapped to the academic timeline.",
+        "Work proceeded in vertical slices: backend and database first, then ML scoring, then frontend "
+        "modules (auth, dashboard, capture, disputes, admin). Requirements shifted during development "
+        "(RBAC scoping, Neon migration, bulk seeding, SSE updates), so a rigid waterfall plan would have "
+        "slowed progress. Short cycles aligned with supervisor meetings roughly every two weeks.",
     )
     figure(doc, diagrams["agile"], "Figure 3.6: Agile iterative development with feedback loop")
 
@@ -652,7 +619,8 @@ def chapter3(doc: Document, diagrams: dict[str, Path]) -> None:
             "Monitoring: filterable paginated data table with row-level approve/flag/freeze actions.",
             "Capture: manual transaction form; staff see live 30-second simulator toggle.",
             "Disputes: open cases list with status badges and resolution modal for analysts.",
-            "Admin: user table, fraud rule toggles, reseed realistic data button.",
+            "Profile: cardholders request analyst or admin access; pending state shown in banner.",
+            "Admin: user table, fraud rule toggles, pending role requests, reseed realistic data button.",
         ],
     )
     figure(doc, diagrams["wireframe"], "Figure 3.7: UI wireframe — dashboard layout structure")
@@ -697,14 +665,6 @@ def chapter4(doc: Document, diagrams: dict[str, Path]) -> None:
     doc.add_page_break()
     h1(doc, "Chapter 4: Implementation and Results")
 
-    h2(doc, "Chapter Overview")
-    para(
-        doc,
-        "This chapter maps logical designs to the physical platform, presents key algorithms and "
-        "flowcharts, construction evidence with code snippets, testing methodology, and measured results "
-        "from the implemented FraudShield prototype.",
-    )
-
     h2(doc, "Mapping Logical Design onto Physical Platform")
     table(
         doc,
@@ -718,6 +678,8 @@ def chapter4(doc: Document, diagrams: dict[str, Path]) -> None:
             ["RBAC", "backend/app/services/rbac.py, frontend/lib/roles.ts, RoleGuard"],
             ["Database", "backend/app/models.py, migrations/, Neon DATABASE_URL"],
             ["Caching", "backend/app/services/cache.py — overview and public stats keys"],
+            ["Live updates", "backend/app/services/live_events.py — SSE broadcast on ingest"],
+            ["Frontend stream", "frontend/components/live-stream-provider.tsx — EventSource client"],
         ],
     )
 
@@ -747,7 +709,7 @@ def chapter4(doc: Document, diagrams: dict[str, Path]) -> None:
         "INSERT FraudDecision(rule_score, behavior_score, ml_score, reasons)\n"
         "UPDATE UserProfile(avg_spend, top_locations, tx_count)\n"
         "IF final_score >= 60 THEN status<-flagged; create Alert + FraudNotification\n"
-        "WRITE AuditLog; invalidate_read_caches()\n"
+        "WRITE AuditLog; invalidate_read_caches(); broadcast SSE event\n"
         "RETURN 201 with transaction id, risk_score, confidence, label",
     )
 
@@ -796,6 +758,14 @@ def chapter4(doc: Document, diagrams: dict[str, Path]) -> None:
         '  ...\n'
         ']',
     )
+    h3(doc, "Frontend — Live updates (SSE)")
+    para(
+        doc,
+        "After ingest the backend publishes a JSON event to all connected dashboard clients. The browser "
+        "opens GET /transactions/stream with the JWT as a query parameter (EventSource cannot send custom "
+        "headers). Monitoring, overview, and alert pages patch local state when an event arrives instead "
+        "of reloading the whole page.",
+    )
     h3(doc, "Application Screenshots")
     para(
         doc,
@@ -831,10 +801,10 @@ def chapter4(doc: Document, diagrams: dict[str, Path]) -> None:
     h3(doc, "System Testing")
     para(
         doc,
-        "Verification: build matches specification—all features in Chapter 1 scope are present. Validation: "
-        "demo users complete a realistic fraud investigation scenario: (1) analyst starts live simulator; "
-        "(2) high-risk transaction appears in flagged queue; (3) analyst opens explainability view; "
-        "(4) cardholder opens dispute; (5) analyst resolves dispute; (6) admin exports CSV/PDF report.",
+        "A full demo scenario was run with the three seeded accounts: an analyst starts the live "
+        "simulator; a high-risk transaction appears in the flagged queue without refreshing the page; "
+        "the analyst opens the explain view; a cardholder opens a dispute; the analyst resolves it; "
+        "an admin exports CSV and PDF reports.",
     )
 
     h3(doc, "Test Cases (Sample)")
@@ -858,7 +828,8 @@ def chapter4(doc: Document, diagrams: dict[str, Path]) -> None:
         [
             "System successfully scores and persists transactions with risk_score and ML confidence on every ingest.",
             "Hybrid engine flags high-risk synthetic patterns (large amount + velocity + foreign location).",
-            "Dashboard displays live KPIs, charts, heatmap, and flagged queue with role-appropriate navigation.",
+            "Dashboard displays KPIs, charts, heatmap, and flagged queue with role-appropriate navigation.",
+            "SSE stream pushes new transactions to open dashboard tabs without manual refresh.",
             "Dispute workflow supports open → resolved lifecycle with analyst resolution notes.",
             "Admin reseed completes in ~90 seconds on Neon (optimised bulk insert vs prior 30+ minute hang).",
             "Exports produce non-empty CSV and PDF when seed data is present.",
@@ -884,30 +855,26 @@ def chapter5(doc: Document) -> None:
     doc.add_page_break()
     h1(doc, "Chapter 5: Findings and Conclusion")
 
-    h2(doc, "Chapter Overview")
-    para(doc, "This chapter summarises project outcomes, conclusions, limitations, lessons learned, and recommendations.")
-
     h2(doc, "Findings")
     bullets(
         doc,
         [
-            "Hybrid scoring (rules + behavior + ML) produces more balanced alerts than any single method alone in demo scenarios.",
-            "Role-based access control is essential to separate cardholder privacy from analyst global visibility.",
-            "Explainability views improve analyst confidence even when formal SHAP is not deployed.",
-            "Bulk database operations are critical for acceptable latency on serverless PostgreSQL.",
-            "Iterative Agile delivery suited evolving academic requirements including Neon migration and dispute workflow.",
-            "Centralising ingest in one service module eliminated duplicate ML queries and inconsistent scoring.",
+            "Combining rules, behaviour checks, and ML produced more useful alerts in demo runs than any single method alone.",
+            "Role-based access is required so cardholders see only their own data while staff see global queues.",
+            "Showing score breakdowns helped during manual testing even without formal SHAP plots.",
+            "Bulk inserts were necessary to keep reseed time acceptable on Neon serverless PostgreSQL.",
+            "Working in small slices matched how requirements changed (Neon move, disputes, SSE, role requests).",
+            "Centralising ingest in transaction_ingest.py removed duplicate ML calls and inconsistent scores.",
         ],
     )
 
     h2(doc, "Conclusions")
     para(
         doc,
-        "The FraudShield project successfully demonstrates a complete credit card fraud detection platform "
-        "with authentication, hybrid intelligence, operational dashboard, dispute resolution, and reporting. "
-        "All primary objectives stated in Chapter 1 were met within prototype scope. The system is suitable "
-        "for academic demonstration, further research into explainable fraud detection, and incremental "
-        "hardening toward production deployment with payment network integration and compliance certification.",
+        "The main goal of the project was to deliver a working fraud-detection web application with hybrid "
+        "scoring and role-based access. That goal was met within the scope of a final-year prototype. The "
+        "system is ready for demonstration and could be extended later with live payment feeds and stronger "
+        "production hosting.",
     )
 
     h2(doc, "Challenges / Limitations of the System")
@@ -926,11 +893,11 @@ def chapter5(doc: Document) -> None:
     bullets(
         doc,
         [
-            "Security (RBAC, scoped queries) must be designed early—not retrofitted after features are built.",
-            "Separating the scoring engine from HTTP transport simplifies testing and reuse (simulator, seed, API).",
-            "Documentation, seed data, and demo accounts accelerate demonstration and examiner evaluation.",
-            "Performance profiling on cloud databases reveals bottlenecks invisible in local SQLite development.",
-            "Client-side hydration mismatches require deferring browser-only state to useEffect hooks.",
+            "RBAC and scoped queries should be planned early—not added after features ship.",
+            "Keeping the scoring engine separate from HTTP handlers made simulator and seed scripts easier to test.",
+            "Seed data and demo accounts saved time during every demonstration rehearsal.",
+            "Cloud database latency showed up only after moving off local SQLite.",
+            "Browser hydration errors were avoided by loading session-only state inside useEffect.",
         ],
     )
 
@@ -938,24 +905,21 @@ def chapter5(doc: Document) -> None:
     bullets(
         doc,
         [
-            "Integrate real payment webhooks and stream processing (e.g. Apache Kafka, Redis streams).",
-            "Add formal SHAP or LIME explainability for regulatory-grade model interpretation.",
-            "Implement genuine email/SMS gateways and TOTP-based two-factor authentication.",
-            "Deploy with Docker Compose, CI/CD (GitHub Actions), and observability (Prometheus, Grafana).",
-            "Expand ML features: merchant category embeddings, graph-based fraud rings, model retraining pipeline.",
-            "Add automated pytest suite and Playwright end-to-end browser tests.",
+            "Connect to real payment webhooks or a message queue for production-scale ingest.",
+            "Add SHAP or LIME if regulators require formal model explanations.",
+            "Wire up real email/SMS gateways and TOTP two-factor authentication.",
+            "Package with Docker and add CI/CD plus basic monitoring.",
+            "Retrain the model on institution-specific data and expand feature engineering.",
+            "Add pytest unit tests and Playwright browser tests for regression coverage.",
         ],
     )
 
     h2(doc, "Recommendations for Project Commercialization")
     para(
         doc,
-        "Commercialisation could target small fintechs and regional banks via a SaaS subscription model: "
-        "per-transaction scoring API pricing, analyst seat licences, and compliance report packs. A phased "
-        "go-to-market would include: (1) pilot programme with one institution; (2) PCI-DSS and SOC2 readiness "
-        "assessment; (3) open-core model with free developer tier and paid enterprise analytics; (4) "
-        "partnership with payment processors for embedded fraud scoring. Revenue streams include API usage "
-        "fees, premium explainability modules, and professional services for custom rule configuration.",
+        "A small fintech or campus security lab could adopt the core API as a starting point. A realistic "
+        "business model would charge per API call or per analyst seat, but production use would require "
+        "PCI review, proper hosting, and support staff. That work is outside the scope of this academic build.",
     )
 
     h2(doc, "References")

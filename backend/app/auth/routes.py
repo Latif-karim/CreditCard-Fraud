@@ -7,6 +7,7 @@ from flask_jwt_extended import create_access_token, get_jwt_identity, jwt_requir
 from ..extensions import db
 from ..models import PasswordResetToken, User
 from ..schemas import LoginSchema, RegisterSchema
+from ..services.user_access import effective_role, requires_approval
 
 auth_bp = Blueprint("auth", __name__, url_prefix="/auth")
 
@@ -15,11 +16,11 @@ _APPROVAL_REQUIRED_ROLES = frozenset({"analyst", "admin"})
 
 
 def _requires_approval(user: User) -> bool:
-    return user.role in _APPROVAL_REQUIRED_ROLES and not user.approved
+    return requires_approval(user)
 
 
 def _effective_role(user: User) -> str:
-    return "user" if _requires_approval(user) else user.role
+    return effective_role(user)
 
 
 @auth_bp.post("/register")
