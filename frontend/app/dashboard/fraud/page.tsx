@@ -45,7 +45,7 @@ export default function FraudLabPage() {
 
   return (
     <RoleGuard allow={["analyst", "admin"]} title="Risk analysis">
-    <AppShell title="Fraud detection lab" subtitle="Test transactions and review scoring">
+    <AppShell title="Fraud detection lab" subtitle="Test CNN + autoencoder hybrid scoring on live transaction payloads">
       <div className="grid gap-4 lg:grid-cols-[320px_1fr]">
         <div className="glass-card space-y-3 p-4">
           <div className="flex items-center gap-2 text-sm font-semibold">
@@ -101,14 +101,22 @@ export default function FraudLabPage() {
             </div>
           ) : result ? (
             <>
-              <div className="glass-card grid gap-3 p-4 sm:grid-cols-3">
+              <div className="glass-card grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-5">
                 <div>
                   <p className="text-soft text-xs">Risk score</p>
                   <p className="text-2xl font-semibold">{result.risk_score.toFixed(1)}</p>
                 </div>
                 <div>
-                  <p className="text-soft text-xs">ML probability</p>
+                  <p className="text-soft text-xs">Hybrid DL probability</p>
                   <p className="text-2xl font-semibold">{(result.ml_probability * 100).toFixed(1)}%</p>
+                </div>
+                <div>
+                  <p className="text-soft text-xs">CNN classifier</p>
+                  <p className="text-2xl font-semibold">{((result.cnn_probability ?? result.ml_probability) * 100).toFixed(1)}%</p>
+                </div>
+                <div>
+                  <p className="text-soft text-xs">Autoencoder anomaly</p>
+                  <p className="text-2xl font-semibold">{((result.autoencoder_score ?? 0) * 100).toFixed(1)}%</p>
                 </div>
                 <div>
                   <p className="text-soft text-xs">Band</p>

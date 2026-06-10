@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { Search } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
+import { RoleGuard } from "@/components/role-guard";
 import { ChartAreaSkeleton, FormPanelSkeleton } from "@/components/skeletons";
 import { HorizontalFeatureChart } from "@/components/charts/horizontal-feature-chart";
 import { ScrollReveal } from "@/components/scroll-reveal";
@@ -47,10 +48,8 @@ export default function ExplainPage() {
   }, [searchParams, load]);
 
   return (
-    <AppShell
-      title={role === "user" ? "Transaction status" : "AI explainability"}
-      subtitle={role === "user" ? "Customer-friendly review status" : "Interpretability & transparency"}
-    >
+    <RoleGuard allow={["analyst", "admin"]} title="Explainability">
+    <AppShell title="Deep learning explainability" subtitle="CNN + autoencoder attribution for analyst review">
       <div className="glass-card mb-4 flex flex-wrap items-end gap-2 p-4">
         <div className="min-w-[200px] flex-1">
           <label className="text-soft text-xs">Transaction ID</label>
@@ -68,7 +67,7 @@ export default function ExplainPage() {
           className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white dark:bg-white dark:text-slate-900"
         >
           <Search className="h-4 w-4" />
-          {role === "user" ? "Check status" : "Explain"}
+          Explain
         </button>
       </div>
       {err ? <p className="text-sm text-red-600">{err}</p> : null}
@@ -79,15 +78,6 @@ export default function ExplainPage() {
         </div>
       ) : null}
       {!loading && data ? (
-        role === "user" ? (
-          <div className="glass-card p-4">
-            <p className="text-soft text-xs">Transaction #{data.transaction_id}</p>
-            <p className="mt-2 text-2xl font-semibold">{data.customer_status || data.status}</p>
-            <p className="text-soft mt-2 text-sm">
-              {data.message || "This transaction status is available in your account activity."}
-            </p>
-          </div>
-        ) : (
         <div className="space-y-4">
           <div className="glass-card grid gap-3 p-4 sm:grid-cols-3">
             <div>
@@ -121,8 +111,8 @@ export default function ExplainPage() {
             Feature influence rankings help analysts understand why a transaction received its risk score.
           </p>
         </div>
-        )
       ) : null}
     </AppShell>
+    </RoleGuard>
   );
 }

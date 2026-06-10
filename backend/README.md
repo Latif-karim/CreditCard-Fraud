@@ -1,6 +1,6 @@
 # Fraud Detection Backend (Flask)
 
-Enterprise-style API for credit card fraud detection: JWT auth (roles **admin**, **analyst**, **user**), transaction ingest and monitoring, ML scoring with explainability hooks, alerts, admin, reports, and audit trails.
+Enterprise-style API for credit card fraud detection: JWT auth (roles **admin**, **analyst**), transaction ingest and monitoring, **deep learning hybrid scoring** (1D-CNN + autoencoder), explainability hooks, alerts, admin, reports, and audit trails.
 
 ## Quick start
 
@@ -30,17 +30,32 @@ If this is a fresh clone after new migrations were added, generate/apply migrati
 
 ## Roles
 
-- **admin** — user/rule management, model retrain stub, full audit exports  
+- **admin** — user/rule management, model retrain, full audit exports  
 - **analyst** — dashboards, monitoring, fraud lab, explainability  
-- **user** — cardholder workspace and owned transaction views  
 
-Analyst/admin self-registration creates an access request (`approved=false`). The account signs in as a cardholder while the request is pending, then receives the requested role after an existing admin approves it.
+Self-registration creates an access request (`approved=false`). The fraud operations console remains locked until an administrator approves the account.
+
+## Deep learning models
+
+Bootstrap synthetic training (no Kaggle file required):
+
+```bash
+python ml/bootstrap_model.py
+```
+
+Train on the European benchmark dataset:
+
+```bash
+python ml/train_model.py --dataset path/to/creditcard.csv
+```
+
+Artifacts are written to `ml/artifacts/` (`fraud_cnn.keras`, `fraud_autoencoder.keras`, `feature_scaler.joblib`, `metrics.json`).
 
 ## Auth
 
 | Method | Path | Notes |
 |--------|------|--------|
-| POST | `/auth/register` | Body: `email`, `password` (8+), optional `full_name`, `role` in `user` \| `analyst` \| `admin`; staff roles require approval |
+| POST | `/auth/register` | Body: `email`, `password` (8+), optional `full_name`, `role` in `analyst` \| `admin`; requires approval |
 | POST | `/auth/login` | Returns JWT + `role` |
 | POST | `/auth/forgot-password` | OTP stored; in **debug**, response may include `dev_otp` |
 | POST | `/auth/verify-otp` | `{ email, otp }` → `{ valid }` |
@@ -123,7 +138,7 @@ Dataset: [Kaggle Credit Card Fraud Detection](https://www.kaggle.com/datasets/ml
 python ml/train_model.py --dataset "C:\path\to\creditcard.csv"
 ```
 
-Artifacts: `ml/artifacts/fraud_model.joblib`, `metrics.json`. Runtime loads the joblib in `app/fraud/model.py` when present.
+Artifacts: `ml/artifacts/fraud_cnn.keras`, `fraud_autoencoder.keras`, `feature_scaler.joblib`, `metrics.json`. Runtime loads the Keras models in `app/fraud/model.py` when present.
 
 ## Next steps (production)
 

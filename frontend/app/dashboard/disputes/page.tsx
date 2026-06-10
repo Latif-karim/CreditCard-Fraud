@@ -59,7 +59,7 @@ export default function DisputesPage() {
 
   return (
     <RoleGuard allow={["analyst", "admin"]} title="Disputes">
-      <AppShell title="Dispute cases" subtitle="Cardholder review requests awaiting analyst decision">
+      <AppShell title="Dispute cases" subtitle="Issuer dispute cases awaiting analyst decision">
         {notice ? (
           <p className="mb-4 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-900 dark:border-sky-900 dark:bg-sky-950/40 dark:text-sky-100">
             {notice}

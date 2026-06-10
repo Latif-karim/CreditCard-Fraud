@@ -22,7 +22,7 @@ export function ProductScreenshot({
 
   return (
     <div
-      className={`relative aspect-video overflow-hidden rounded-2xl border border-white/10 bg-slate-800/80 shadow-2xl ${className}`}
+      className={`relative aspect-video overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 shadow-2xl dark:border-slate-700 dark:bg-slate-800/80 ${className}`}
     >
       {useCustom ? (
         <Image

@@ -1,20 +1,9 @@
-"""Role-based access helpers for API routes."""
+"""Role-based access helpers for fraud operations API routes."""
 
 from flask_jwt_extended import get_jwt_identity
 
-from ..models import Transaction, User
-
-
-def current_role() -> str | None:
-    identity = actor_user_id()
-    if identity is None:
-        return None
-    user = User.query.get(identity)
-    if not user or not user.is_active:
-        return None
-    if user.role in ("admin", "analyst") and not user.approved:
-        return "user"
-    return user.role
+from ..models import User
+from .user_access import requires_approval
 
 
 def actor_user_id() -> int | None:
@@ -27,37 +16,50 @@ def actor_user_id() -> int | None:
         return None
 
 
+def _actor_user() -> User | None:
+    uid = actor_user_id()
+    if uid is None:
+        return None
+    user = User.query.get(uid)
+    if not user or not user.is_active:
+        return None
+    return user
+
+
+def current_role() -> str | None:
+    user = _actor_user()
+    if not user:
+        return None
+    return user.role
+
+
+def is_approved() -> bool:
+    user = _actor_user()
+    if not user:
+        return False
+    return not requires_approval(user)
+
+
 def is_admin() -> bool:
-    return current_role() == "admin"
+    return is_approved() and current_role() == "admin"
 
 
 def is_analyst() -> bool:
-    return current_role() == "analyst"
+    return is_approved() and current_role() == "analyst"
 
 
 def is_staff() -> bool:
-    return current_role() in ("admin", "analyst")
-
-
-def is_cardholder() -> bool:
-    return current_role() == "user"
+    return is_approved() and current_role() in ("admin", "analyst")
 
 
 def scope_transactions(query):
-    """Limit transaction queries to the signed-in cardholder when role is user."""
-    if is_cardholder():
-        uid = actor_user_id()
-        if uid is not None:
-            return query.filter(Transaction.user_id == uid)
+    """All transaction queries are global for approved fraud operations staff."""
     return query
 
 
 def require_staff():
-    return is_staff() or is_admin()
+    return is_staff()
 
 
-def can_manage_transaction(tx: Transaction) -> bool:
-    if is_staff():
-        return True
-    uid = actor_user_id()
-    return uid is not None and tx.user_id == uid
+def can_manage_transaction(_tx) -> bool:
+    return is_staff()

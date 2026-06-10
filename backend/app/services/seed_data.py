@@ -8,13 +8,14 @@ from collections import Counter
 from datetime import datetime, timedelta
 
 from ..extensions import db
-from ..models import AuditLog, FraudDecision, Transaction, User, UserProfile
+from ..models import AuditLog, Transaction, User, UserProfile
 from .admin_maintenance import purge_all_transaction_data
 from .transaction_generator import (
     REALISTIC_FLAGGED_RATE,
     normal_transaction_payload,
     suspicious_transaction_payload,
 )
+from .transaction_ingest import ingest_transaction_data
 
 logger = logging.getLogger(__name__)
 
@@ -24,8 +25,8 @@ def ensure_demo_users() -> list[int]:
     ids: list[int] = []
     demos = [
         ("analyst@fraudshield.demo", "analyst", "Demo Analyst"),
-        ("user@fraudshield.demo", "user", "Demo Cardholder"),
         ("ops@fraudshield.demo", "admin", "Demo Admin"),
+        ("reviewer@fraudshield.demo", "analyst", "Demo Senior Analyst"),
     ]
     for email, role, name in demos:
         user = User.query.filter_by(email=email).first()
@@ -62,7 +63,7 @@ def _score_bundle(*, flagged: bool) -> dict:
                 "Unusual location compared to user history",
                 "High transaction amount (above $5,000)",
                 "Location differs from recent activity",
-                "ML model detected high fraud probability",
+                "Deep learning ensemble detected high fraud probability",
             ]
         )
         rule_score = round(random.uniform(10.0, 25.0), 1)
@@ -90,12 +91,9 @@ def _score_bundle(*, flagged: bool) -> dict:
     }
 
 
-def _cardholder_ids(user_ids: list[int]) -> list[int]:
-    if not user_ids:
-        return []
-    rows = User.query.filter(User.id.in_(user_ids), User.role == "user").with_entities(User.id).all()
-    holders = [row[0] for row in rows]
-    return holders or user_ids
+def _account_holder_ids(user_ids: list[int]) -> list[int]:
+    """Demo account holders for seeded transactions (not a login role)."""
+    return user_ids or []
 
 
 def _apply_profiles_from_transactions(transactions: list[Transaction]) -> None:
@@ -117,65 +115,34 @@ def _apply_profiles_from_transactions(transactions: list[Transaction]) -> None:
 
 
 def seed_realistic_transactions(*, min_count: int = 80) -> int:
-    """Seed spread-out historical transactions targeting ~4% flagged rate."""
+    """Seed transactions through the live ingest pipeline (rules + behavior + DL scoring)."""
     demo_ids = ensure_demo_users()
-    cardholder_ids = _cardholder_ids(demo_ids)
-    if not cardholder_ids:
+    account_ids = _account_holder_ids(demo_ids)
+    if not account_ids:
         return 0
 
     start = datetime.utcnow() - timedelta(days=60)
     flagged_target = max(1, int(round(min_count * REALISTIC_FLAGGED_RATE)))
     flagged_slots = set(random.sample(range(min_count), flagged_target))
-
-    transactions: list[Transaction] = []
-    decisions: list[dict] = []
+    actor_id = demo_ids[0] if demo_ids else None
+    seeded = 0
 
     for i in range(min_count):
-        uid = cardholder_ids[i % len(cardholder_ids)]
-        flagged = i in flagged_slots
-        payload = suspicious_transaction_payload(uid) if flagged else normal_transaction_payload(uid)
-        scores = _score_bundle(flagged=flagged)
+        uid = account_ids[i % len(account_ids)]
+        payload = (
+            suspicious_transaction_payload(uid)
+            if i in flagged_slots
+            else normal_transaction_payload(uid)
+        )
+        result = ingest_transaction_data(payload, actor_user_id=actor_id, quiet=True)
         created_at = start + timedelta(
             hours=(i * (60 * 24 / max(min_count, 1))) + random.uniform(0.5, 8.0)
         )
-        tx = Transaction(
-            user_id=uid,
-            amount=float(payload["amount"]),
-            location=payload["location"],
-            country=payload.get("country") or payload["location"],
-            merchant=payload.get("merchant"),
-            merchant_category=payload.get("merchant_category"),
-            card_last4=payload.get("card_last4"),
-            card_type=payload.get("card_type") or "unknown",
-            ip_address=payload.get("ip_address"),
-            device_id=payload.get("device_id"),
-            risk_score=scores["risk_score"],
-            confidence=scores["ml_probability"],
-            status=scores["status"],
-            created_at=created_at,
-        )
-        transactions.append(tx)
-        decisions.append(scores)
-
-    db.session.add_all(transactions)
-    db.session.flush()
-
-    db.session.add_all(
-        [
-            FraudDecision(
-                transaction_id=tx.id,
-                rule_score=scores["rule_score"],
-                behavior_score=scores["behavior_score"],
-                ml_score=scores["ml_score"],
-                ml_probability=scores["ml_probability"],
-                reasons=scores["reasons"],
-                final_label=scores["label"],
-            )
-            for tx, scores in zip(transactions, decisions)
-        ]
-    )
-
-    _apply_profiles_from_transactions(transactions)
+        tx = Transaction.query.get(result["transaction_id"])
+        if tx:
+            tx.created_at = created_at
+            db.session.commit()
+        seeded += 1
 
     if AuditLog.query.count() < 5:
         db.session.add(

@@ -5,7 +5,8 @@ from __future__ import annotations
 from ..models import User
 
 APPROVAL_REQUIRED_ROLES = frozenset({"analyst", "admin"})
-ALLOWED_ELEVATION_ROLES = frozenset({"analyst", "admin"})
+ALLOWED_REGISTER_ROLES = frozenset({"analyst", "admin"})
+ALLOWED_ELEVATION_ROLES = ALLOWED_REGISTER_ROLES
 
 
 def requires_approval(user: User) -> bool:
@@ -13,7 +14,7 @@ def requires_approval(user: User) -> bool:
 
 
 def effective_role(user: User) -> str:
-    return "user" if requires_approval(user) else user.role
+    return user.role
 
 
 def requested_role(user: User) -> str | None:

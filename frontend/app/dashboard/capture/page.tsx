@@ -47,7 +47,7 @@ function SectionTitle({ icon: Icon, title }: { icon: LucideIcon; title: string }
 export default function CapturePage() {
   const { notifyLocal } = useTransactionNotifications();
   const [ready, setReady] = useState(false);
-  const [role, setRole] = useState("user");
+  const [role, setRole] = useState("analyst");
   const [userId, setUserId] = useState("1");
   const [amount, setAmount] = useState("125.50");
   const [location, setLocation] = useState("London");
@@ -72,7 +72,7 @@ export default function CapturePage() {
     }
     const uid = getClientUserId();
     if (uid) setUserId(String(uid));
-    setRole(localStorage.getItem("role") || "user");
+    setRole(localStorage.getItem("role") || "analyst");
     setReady(true);
 
     try {
@@ -122,9 +122,7 @@ export default function CapturePage() {
         ip_address: "203.0.113.10",
         device_id: "manual-entry",
       };
-      if (role === "admin" || role === "analyst") {
-        body.user_id = Number(userId);
-      }
+      body.user_id = Number(userId);
       const res = await postWithAuth<IngestResult>("/transactions/ingest", body, token);
       setLastResult(res);
       notifyLocal({
@@ -138,9 +136,7 @@ export default function CapturePage() {
         confidence: res.confidence ?? 0,
       });
       setMsg(
-        role === "user"
-          ? `Transaction #${res.transaction_id} · ${res.customer_status || res.status} · score ${(res.risk_score ?? 0).toFixed(1)} · ML ${((res.confidence ?? 0) * 100).toFixed(1)}%`
-          : `Transaction #${res.transaction_id} · risk ${(res.risk_score ?? 0).toFixed(1)} · ML ${((res.confidence ?? 0) * 100).toFixed(1)}% · ${res.status}`
+        `Transaction #${res.transaction_id} · risk ${(res.risk_score ?? 0).toFixed(1)} · DL hybrid ${((res.confidence ?? 0) * 100).toFixed(1)}% · ${res.status}`
       );
     } catch (err) {
       setMsg((err as Error).message);
@@ -343,25 +339,17 @@ export default function CapturePage() {
             <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-3 text-sm dark:border-cyan-400/20">
               <p className="font-medium text-slate-900 dark:text-white">
                 TX #{lastResult.transaction_id}
-                {role === "user"
-                  ? ` · ${lastResult.customer_status || lastResult.status}`
-                  : ` · ${lastResult.label}`}
+                {` · ${lastResult.label}`}
                 {" · score "}
                 {(lastResult.risk_score ?? 0).toFixed(1)}
-                {" · ML "}
+                {" · DL hybrid "}
                 {((lastResult.confidence ?? 0) * 100).toFixed(1)}%
               </p>
-              {role === "user" ? (
-                <p className="text-soft mt-2 text-xs">
-                  {lastResult.message || "Saved to your account history."}
-                </p>
-              ) : (
-                <ul className="text-soft mt-2 list-disc pl-5 text-xs">
-                  {(lastResult.reasons || []).slice(0, 4).map((r, i) => (
-                    <li key={i}>{r}</li>
-                  ))}
-                </ul>
-              )}
+              <ul className="text-soft mt-2 list-disc pl-5 text-xs">
+                {(lastResult.reasons || []).slice(0, 4).map((r, i) => (
+                  <li key={i}>{r}</li>
+                ))}
+              </ul>
             </div>
           ) : null}
         </form>

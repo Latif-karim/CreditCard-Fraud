@@ -1,34 +1,81 @@
 {
-  "selected_model": "rf_smote",
-  "selection_strategy": "highest recall, tie-break by average_precision",
+  "selected_model": "hybrid_cnn_ae",
+  "selection_strategy": "hybrid CNN + autoencoder fusion (production-style dual signal)",
+  "model_type": "deep_learning",
   "results": [
     {
-      "name": "rf_smote",
-      "average_precision": 0.5075948375784506,
-      "recall": 0.8666666666666667,
-      "precision": 0.040123456790123455,
-      "f1": 0.07669616519174041
+      "average_precision": 0.6916045372652764,
+      "roc_auc": 0.9816067588402835,
+      "recall": 0.8877551020408163,
+      "precision": 0.1045673076923077,
+      "f1": 0.1870967741935484,
+      "name": "cnn_classifier"
     },
     {
-      "name": "logreg_baseline",
-      "average_precision": 0.4611291563560914,
-      "recall": 0.8,
-      "precision": 0.029556650246305417,
-      "f1": 0.057007125890736345
+      "average_precision": 0.6885109131067909,
+      "roc_auc": 0.9796667559117064,
+      "recall": 0.8877551020408163,
+      "precision": 0.10861423220973783,
+      "f1": 0.1935483870967742,
+      "name": "hybrid_cnn_ae",
+      "fusion_weights": {
+        "cnn": 0.75,
+        "autoencoder": 0.25
+      }
     },
     {
-      "name": "logreg_smote",
-      "average_precision": 0.4569098085583963,
-      "recall": 0.8,
-      "precision": 0.029850746268656716,
-      "f1": 0.05755395683453238
-    },
-    {
-      "name": "logreg_undersample",
-      "average_precision": 0.4518815895850711,
-      "recall": 0.8,
-      "precision": 0.03225806451612903,
-      "f1": 0.06201550387596899
+      "average_precision": 0.04152414924430618,
+      "roc_auc": 0.9511867915427286,
+      "recall": 0.8877551020408163,
+      "precision": 0.01825047199496539,
+      "f1": 0.03576567317574512,
+      "name": "autoencoder_anomaly",
+      "reconstruction_threshold": 2.1104931831359863
     }
-  ]
+  ],
+  "manifest": {
+    "model_family": "deep_learning_hybrid",
+    "architecture": {
+      "classifier": "1d_cnn",
+      "anomaly_detector": "dense_autoencoder",
+      "fusion": "0.75*cnn + 0.25*ae_reconstruction"
+    },
+    "feature_count": 31,
+    "feature_order": [
+      "V1",
+      "V2",
+      "V3",
+      "V4",
+      "V5",
+      "V6",
+      "V7",
+      "V8",
+      "V9",
+      "V10",
+      "V11",
+      "V12",
+      "V13",
+      "V14",
+      "V15",
+      "V16",
+      "V17",
+      "V18",
+      "V19",
+      "V20",
+      "V21",
+      "V22",
+      "V23",
+      "V24",
+      "V25",
+      "V26",
+      "V27",
+      "V28",
+      "Amount_log",
+      "tx_frequency_10m",
+      "minutes_since_last"
+    ],
+    "trained_at": "2026-06-10T10:02:42.732821+00:00",
+    "framework": "tensorflow-2.21.0",
+    "ae_reconstruction_threshold": 2.1104931831359863
+  }
 }

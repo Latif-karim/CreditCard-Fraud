@@ -57,7 +57,7 @@ def update_profile():
 @users_bp.post("/me/request-role")
 @jwt_required()
 def request_role():
-    """Cardholder (or pending requester) asks for analyst or admin access."""
+    """Pending requester asks for analyst or admin access."""
     uid = int(get_jwt_identity())
     user = User.query.get(uid)
     if not user:
@@ -104,7 +104,7 @@ def request_role():
             {
                 "message": (
                     f"Access request submitted for {role} role. "
-                    "You can continue using the cardholder workspace until an administrator approves your request."
+                    "An administrator must approve your fraud operations workspace."
                 ),
                 "requested_role": role,
                 "approved": False,
@@ -125,8 +125,8 @@ def cancel_role_request():
         return jsonify({"error": "No pending access request to cancel"}), 400
 
     cancelled = user.role
-    user.role = "user"
-    user.approved = True
+    user.role = "analyst"
+    user.approved = False
     log_action(
         uid,
         "role_access_cancelled",
@@ -135,7 +135,7 @@ def cancel_role_request():
         {"cancelled_role": cancelled},
     )
     db.session.commit()
-    return jsonify({"message": "Access request cancelled. You remain a cardholder."}), 200
+    return jsonify({"message": "Access request cancelled. Your workspace access remains pending approval."}), 200
 
 
 @users_bp.post("/change-password")

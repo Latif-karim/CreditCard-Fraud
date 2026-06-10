@@ -9,7 +9,7 @@ class User(db.Model):
     password_hash = db.Column(db.String(128), nullable=True)
     auth_provider = db.Column(db.String(20), default="email", nullable=True)
     oauth_subject = db.Column(db.String(128), nullable=True)
-    role = db.Column(db.String(20), default="user", nullable=False)
+    role = db.Column(db.String(20), default="analyst", nullable=False)
     full_name = db.Column(db.String(120), nullable=True)
     is_active = db.Column(db.Boolean, default=True, nullable=False)
     approved = db.Column(db.Boolean, default=True, nullable=False)

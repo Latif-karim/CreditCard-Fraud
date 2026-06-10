@@ -6,13 +6,13 @@ from ..models import AuditLog, FraudDecision, FraudRule, Transaction
 from ..services.cache import get_or_set, scoped_key
 from ..services.dashboard_stats import compute_overview_stats
 from ..services.model_metrics import load_model_metrics_payload
-from ..services.rbac import actor_user_id, current_role, is_admin, is_cardholder, is_staff, scope_transactions
+from ..services.rbac import actor_user_id, current_role, is_admin, is_staff, scope_transactions
 
 dashboard_bp = Blueprint("dashboard", __name__, url_prefix="/dashboard")
 
 
 def _staff_ok():
-    return current_role() in ("admin", "analyst", "user")
+    return is_staff() or is_admin()
 
 
 def _admin_only():
@@ -221,9 +221,7 @@ def recent_transactions():
                     "id": tx.id,
                     "amount": tx.amount,
                     "status": tx.status,
-                    "confidence": 0.0
-                    if is_cardholder()
-                    else tx.confidence or (dec.ml_probability if dec else 0.0),
+                    "confidence": tx.confidence or (dec.ml_probability if dec else 0.0),
                     "created_at": tx.created_at.isoformat(),
                     "location": tx.location,
                     "merchant": tx.merchant,
@@ -246,16 +244,6 @@ def live_activity():
     ttl = _cache_ttl(live=True)
 
     def build():
-        if is_cardholder():
-            rows = scope_transactions(Transaction.query).order_by(Transaction.created_at.desc()).limit(8).all()
-            return [
-                {
-                    "title": f"Transaction #{tx.id}",
-                    "detail": f"${tx.amount:.2f} · {tx.location} · {customer_status(tx)}",
-                    "time": tx.created_at.isoformat(),
-                }
-                for tx in rows
-            ]
         logs = AuditLog.query.order_by(AuditLog.created_at.desc()).limit(15).all()
         feed = []
         for log in logs:
@@ -317,7 +305,7 @@ def model_metrics():
 @dashboard_bp.get("/audit-logs")
 @jwt_required()
 def audit_logs():
-    if is_cardholder():
+    if not is_staff():
         return jsonify({"error": "Staff role required"}), 403
     role = current_role()
     ttl = _cache_ttl()

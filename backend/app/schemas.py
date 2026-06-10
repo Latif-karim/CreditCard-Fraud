@@ -24,7 +24,7 @@ class LenientEmail(fields.String):
 class RegisterSchema(Schema):
     email = LenientEmail(required=True)
     password = fields.String(required=True, validate=validate.Length(min=8))
-    role = fields.String(load_default="user", validate=validate.OneOf(["user", "analyst", "admin"]))
+    role = fields.String(load_default="analyst", validate=validate.OneOf(["analyst", "admin"]))
     full_name = fields.String(load_default="")
 
 

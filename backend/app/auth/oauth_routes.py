@@ -65,7 +65,7 @@ def _issue_redirect(*, user=None, error: str | None = None) -> str:
         return _frontend_callback(error="oauth_failed")
     if not user.is_active:
         return _frontend_callback(error="account_suspended")
-    effective_role = "user" if user.role in ("admin", "analyst") and not user.approved else user.role
+    effective_role = user.role
     token = create_access_token(identity=str(user.id), additional_claims={"role": effective_role})
     return _frontend_callback(
         access_token=token,

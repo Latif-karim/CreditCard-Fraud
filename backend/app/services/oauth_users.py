@@ -43,11 +43,11 @@ def get_or_create_oauth_user(
 
     user = User(
         email=email,
-        role="user",
+        role="analyst",
         full_name=full_name,
         email_verified=True,
         is_active=True,
-        approved=True,
+        approved=False,
         auth_provider=provider,
         oauth_subject=subject,
         password_hash=None,

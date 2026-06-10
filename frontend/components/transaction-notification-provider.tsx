@@ -288,7 +288,7 @@ function TransactionToastStack({
             <p className="mt-0.5 text-xs opacity-80">
               {tx.merchant || "Merchant"} · {tx.location}
             </p>
-            {high && role === "user" ? (
+            {high && role === "analyst" ? (
               <p className="mt-2 text-[11px] leading-snug opacity-90">
                 Flagged for review — tap to confirm or dispute.
               </p>

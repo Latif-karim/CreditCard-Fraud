@@ -6,7 +6,7 @@ from sqlalchemy import func
 
 from ..models import FraudRule, Transaction, User
 from ..services.model_metrics import load_model_metrics_payload
-from ..services.rbac import is_cardholder, is_staff, scope_transactions
+from ..services.rbac import is_staff, scope_transactions
 
 _SUSPICIOUS_STATUSES = frozenset({"flagged", "disputed", "blocked", "declined", "frozen"})
 
@@ -57,8 +57,8 @@ def _health_fields() -> dict:
 
 def compute_overview_stats() -> dict:
     stats = _aggregate_transaction_stats(_scoped_query())
-    stats["active_users"] = User.query.filter_by(is_active=True).count() if is_staff() else 1
-    stats["scope"] = "personal" if is_cardholder() else "global"
+    stats["active_users"] = User.query.filter_by(is_active=True).count()
+    stats["scope"] = "global"
     if is_staff():
         stats.update(_health_fields())
     return stats

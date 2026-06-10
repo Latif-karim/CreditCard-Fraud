@@ -58,13 +58,11 @@ def update_user(user_id: int):
     actor_id = int(get_jwt_identity())
     if user.id == actor_id and data.get("approved") is False:
         return jsonify({"error": "You cannot revoke your own approval"}), 400
-    if "role" in data and data["role"] in ("admin", "analyst", "user"):
+    if "role" in data and data["role"] in ("admin", "analyst"):
         user.role = data["role"]
         user.approved = True
     if "approved" in data:
         user.approved = bool(data["approved"])
-    if user.role == "user":
-        user.approved = True
     if "is_active" in data:
         user.is_active = bool(data["is_active"])
     log_action(
@@ -119,8 +117,8 @@ def reject_user(user_id: int):
         return jsonify({"error": "No pending elevated access request for this user"}), 400
 
     requested_role = user.role
-    user.role = "user"
-    user.approved = True
+    user.approved = False
+    user.is_active = False
     log_action(
         actor_id,
         "admin_reject_access",
@@ -308,15 +306,59 @@ def reseed_realistic():
 
 @admin_bp.post("/models/retrain")
 @jwt_required()
-def retrain_stub():
+def retrain_models():
     if not _admin():
         return jsonify({"error": "Admin only"}), 403
+
+    from pathlib import Path
+    import subprocess
+    import sys
+
+    from ..fraud.model import reload_models
+
+    ml_dir = Path(__file__).resolve().parents[2] / "ml"
+    dataset = ml_dir / "artifacts" / "synthetic_creditcard.csv"
+    train_script = ml_dir / "train_model.py"
+    cmd = [sys.executable, str(train_script), "--output-dir", str(ml_dir / "artifacts")]
+    if dataset.exists():
+        cmd.extend(["--dataset", str(dataset)])
+
+    try:
+        completed = subprocess.run(cmd, capture_output=True, text=True, timeout=600, check=False)
+        if completed.returncode != 0:
+            return (
+                jsonify(
+                    {
+                        "error": "Retrain failed",
+                        "stderr": (completed.stderr or completed.stdout)[-2000:],
+                    }
+                ),
+                500,
+            )
+        reload_models()
+    except subprocess.TimeoutExpired:
+        return jsonify({"error": "Retrain timed out after 10 minutes"}), 504
+    except OSError as exc:
+        return jsonify({"error": f"Could not start retrain process: {exc}"}), 500
+
+    from ..services.model_metrics import load_model_metrics_payload
+
+    metrics = load_model_metrics_payload()
     log_action(
         int(get_jwt_identity()) if get_jwt_identity() else None,
-        "model_retrain_requested",
+        "model_retrain_completed",
         "model",
         "fraud",
-        {"status": "queued", "note": "Wire to ml/train_model.py in production"},
+        {"status": "completed", "selected_model": metrics.get("selected_model")},
     )
     db.session.commit()
-    return jsonify({"message": "Retrain job queued (stub)", "status": "queued"}), 202
+    return (
+        jsonify(
+            {
+                "message": "Deep learning models retrained successfully",
+                "status": "completed",
+                "metrics": metrics,
+            }
+        ),
+        200,
+    )

@@ -59,13 +59,10 @@ def ingest_transaction():
     except ValidationError as err:
         return jsonify({"error": "Validation failed", "details": err.messages}), 400
 
-    role = _role()
+    if not is_staff():
+        return jsonify({"error": "Staff role required"}), 403
     uid = int(actor_user_id) if actor_user_id else None
-    if role == "user":
-        if not uid:
-            return jsonify({"error": "Invalid session"}), 401
-        data["user_id"] = uid
-    elif not data.get("user_id"):
+    if not data.get("user_id"):
         return jsonify({"error": "user_id is required"}), 400
 
     target = User.query.get(int(data["user_id"]))

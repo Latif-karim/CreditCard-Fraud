@@ -206,8 +206,8 @@ export default function ProfilePage() {
                   <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
                     <p className="font-medium">Pending {ROLE_LABELS[pendingRole as AppRole] ?? pendingRole} request</p>
                     <p className="mt-1 text-xs opacity-90">
-                      An administrator must approve your request. Until then, you keep cardholder permissions in this
-                      session. Sign out and back in after approval to unlock the new workspace.
+                      An administrator must approve your request. The fraud operations console stays locked until
+                      approval. Sign out and back in after approval to unlock your workspace.
                     </p>
                   </div>
                   <button
@@ -222,8 +222,8 @@ export default function ProfilePage() {
               ) : (
                 <div className="space-y-3">
                   <p className="text-soft text-xs">
-                    Cardholders can request analyst or administrator access. An admin will review your request before
-                    elevated permissions are granted.
+                    Request analyst or administrator access for the fraud operations console. An admin will review
+                    your request before permissions are granted.
                   </p>
                   <label className="text-soft text-xs">Requested role</label>
                   <select

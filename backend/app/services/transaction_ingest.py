@@ -19,7 +19,16 @@ def ingest_transaction_data(
     amount = float(data["amount"])
     location = data["location"]
 
-    result = evaluate_transaction(user_id=user_id, amount=amount, location=location)
+    result = evaluate_transaction(
+        user_id=user_id,
+        amount=amount,
+        location=location,
+        country=data.get("country") or location,
+        merchant=data.get("merchant") or "",
+        merchant_category=data.get("merchant_category") or "",
+        device_id=data.get("device_id") or "",
+        ip_address=data.get("ip_address") or "",
+    )
 
     tx = Transaction(
         user_id=user_id,

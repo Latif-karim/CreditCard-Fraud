@@ -146,27 +146,6 @@ export default function DashboardPage() {
     const token = localStorage.getItem("access_token") || "";
     setDisputeNotice("");
 
-    if (role === "user") {
-      const [overviewRes, recentRes, liveRes, notifsRes] = await Promise.all([
-        fetchWithAuth<DashboardOverview>("/dashboard/overview", token).catch(() => null),
-        fetchWithAuth<RecentTx[]>("/dashboard/recent-transactions", token).catch(() => []),
-        fetchWithAuth<LiveActivityItem[]>("/dashboard/live-activity", token).catch(() => []),
-        fetchWithAuth<FraudNotification[]>("/alerts/notifications", token).catch(() => []),
-      ]);
-      setOverview(overviewRes);
-      setRecent(recentRes ?? []);
-      setLive(liveRes ?? []);
-      setNotifications(notifsRes ?? []);
-      setFlagged([]);
-      setAuditLogs([]);
-      setRegion(null);
-      setCardType(null);
-      setHeatmap(null);
-      setModelMetrics(null);
-      setLoading(false);
-      return;
-    }
-
     const [
       overviewRes,
       trendsRes,
@@ -331,16 +310,14 @@ export default function DashboardPage() {
 
   const subtitle =
     !hydrated || !role
-      ? "Command center"
-      : role === "user"
-        ? "Your card activity"
-        : role === "analyst"
-          ? "Analyst command center"
-          : "Command center";
+      ? "Fraud operations command center"
+      : role === "analyst"
+        ? "Analyst command center"
+        : "Administrator command center";
 
   if (!hydrated || loading) {
     return (
-      <AppShell title={role === "user" ? "Cardholder dashboard" : "Operations dashboard"} subtitle={subtitle}>
+      <AppShell title="Fraud operations dashboard" subtitle={subtitle}>
         <div className="space-y-5">
           <RoleBanner />
           <Skeleton className="h-8 w-48 rounded-full" />
@@ -361,152 +338,8 @@ export default function DashboardPage() {
     );
   }
 
-  if (role === "user") {
-    return (
-      <AppShell title="Cardholder dashboard" subtitle="Your card activity and alerts">
-        <div className="space-y-5">
-          <RoleBanner />
-          {disputeNotice ? (
-            <p className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-900 dark:border-sky-900 dark:bg-sky-950/40 dark:text-sky-200">
-              {disputeNotice}
-            </p>
-          ) : null}
-
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <KpiCard
-              icon={CreditCard}
-              title="Your transactions"
-              value={Number(customerView.total_transactions).toLocaleString()}
-              subtitle="Only your account"
-              tone="info"
-            />
-            <KpiCard
-              icon={ShieldAlert}
-              title="Under review"
-              value={Number(underReviewCount).toLocaleString()}
-              subtitle={`${formatPercent(customerView.review_rate ?? 0)} of your activity`}
-              tone="warning"
-            />
-            <KpiCard
-              icon={CheckCircle2}
-              title="Safe"
-              value={Number(customerView.approved_transactions).toLocaleString()}
-              subtitle="Approved activity"
-              tone="success"
-            />
-            <KpiCard
-              icon={Wallet}
-              title="Total spent"
-              value={`$${Math.round(customerView.total_volume).toLocaleString()}`}
-              subtitle="Personal history"
-              tone="default"
-            />
-          </div>
-
-          <div className="grid gap-4 lg:grid-cols-2">
-            <div className="glass-card p-4" id="alert-feed">
-              <PanelTitle icon={Bell} title="Fraud alerts" />
-              <div className="space-y-3">
-                {notifications.map((n) => (
-                  <Link
-                    key={n.id}
-                    href={notificationHref(n, role)}
-                    className="block rounded-xl border border-amber-200 bg-amber-50/60 p-3 text-sm transition hover:border-amber-300 hover:bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30 dark:hover:border-amber-800"
-                  >
-                    <p className="font-semibold text-slate-900 dark:text-white">{n.title}</p>
-                    <p className="text-soft mt-1 text-xs">{n.body}</p>
-                    <p className="text-soft mt-2 flex items-center gap-1 text-[10px] uppercase tracking-wide">
-                      {new Date(n.created_at).toLocaleString()}
-                      <ChevronRight className="h-3 w-3" aria-hidden="true" />
-                    </p>
-                  </Link>
-                ))}
-                {!notifications.length ? (
-                  <p className="text-soft rounded-xl border border-slate-200 px-3 py-2 text-sm dark:border-slate-800">
-                    No account alerts right now.
-                  </p>
-                ) : null}
-              </div>
-            </div>
-
-            <div className="glass-card p-4">
-              <PanelTitle icon={Radio} title="Account activity" />
-              <ul className="space-y-3 text-sm">
-                {live.map((item, idx) => (
-                  <li key={`${item.title}-${idx}`} className="rounded-xl border border-slate-200 px-3 py-2 dark:border-slate-800">
-                    <p className="font-medium text-slate-900 dark:text-white">{item.title}</p>
-                    <p className="text-soft text-xs">{item.detail}</p>
-                    <p className="text-soft mt-1 text-[10px] uppercase tracking-wide">{item.time}</p>
-                  </li>
-                ))}
-                {!live.length ? <p className="text-soft text-sm">No recent activity.</p> : null}
-              </ul>
-            </div>
-          </div>
-
-          <div className="glass-card scroll-mt-4 p-4">
-            <PanelTitle icon={ArrowLeftRight} title="Personal transactions" />
-            <p className="text-soft -mt-2 mb-3 text-xs">
-              Customer view shows simplified risk status only. Use Report or Not mine to request analyst review.
-            </p>
-            <div className="w-full overflow-x-auto">
-              <table className="w-full min-w-[760px] border-collapse text-sm">
-                <thead>
-                  <tr className="text-soft border-b border-slate-200 dark:border-slate-800">
-                    <th className="pb-2 text-left">Date</th>
-                    <th className="pb-2 text-left">Merchant</th>
-                    <th className="pb-2 text-left">Amount</th>
-                    <th className="pb-2 text-left">Location</th>
-                    <th className="pb-2 text-left">Status</th>
-                    <th className="pb-2 text-left">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {recent.map((tx) => (
-                    <tr key={tx.id} className="border-b border-slate-100 last:border-0 dark:border-slate-800">
-                      <td className="py-2">{tx.created_at ? new Date(tx.created_at).toLocaleDateString() : "—"}</td>
-                      <td className="py-2">{tx.merchant || "Merchant"}</td>
-                      <td className="py-2">${tx.amount.toFixed(2)}</td>
-                      <td className="py-2">{tx.location}</td>
-                      <td className="py-2">
-                        <CustomerStatusBadge status={tx.customer_status || tx.status} />
-                      </td>
-                      <td className="py-2">
-                        <div className="flex flex-wrap gap-2">
-                          <button
-                            type="button"
-                            disabled={disputeBusy !== null}
-                            onClick={() => void submitDispute(tx.id, "request_review")}
-                            className="rounded border border-sky-200 px-2 py-1 text-xs font-medium text-sky-700 disabled:opacity-40 dark:border-sky-900 dark:text-sky-300"
-                          >
-                            Request review
-                          </button>
-                          <button
-                            type="button"
-                            disabled={disputeBusy !== null}
-                            onClick={() => void submitDispute(tx.id, "not_mine")}
-                            className="rounded border border-red-200 px-2 py-1 text-xs font-medium text-red-700 disabled:opacity-40 dark:border-red-900 dark:text-red-400"
-                          >
-                            {disputeBusy === tx.id ? "…" : "Not mine"}
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {!recent.length ? (
-                <p className="text-soft py-4 text-sm">No transactions have been recorded for your account.</p>
-              ) : null}
-            </div>
-          </div>
-        </div>
-      </AppShell>
-    );
-  }
-
   return (
-    <AppShell title="Operations dashboard" subtitle={subtitle}>
+    <AppShell title="Fraud operations dashboard" subtitle={subtitle}>
       <div className="space-y-5">
         <RoleBanner />
         <div className="flex flex-wrap items-center gap-2">
@@ -521,7 +354,8 @@ export default function DashboardPage() {
           {modelMetrics ? (
             <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white/80 px-3 py-1 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-900/80 dark:text-slate-300">
               <Activity className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
-              PR-AUC {formatMetric(modelMetrics.pr_auc)} · Recall {formatMetric(modelMetrics.recall_fraud)}
+              DL {String(modelMetrics.model_family || "hybrid")} · PR-AUC {formatMetric(modelMetrics.pr_auc)} · ROC-AUC{" "}
+              {formatMetric(modelMetrics.roc_auc)}
               {modelMetrics.artifact_present === false ? " · bootstrap needed" : ""}
             </span>
           ) : null}

@@ -7,8 +7,8 @@ Flask-Bcrypt
 marshmallow
 python-dotenv
 scikit-learn
+tensorflow>=2.20.0
 pandas
-imbalanced-learn
 joblib
 numpy
 PyJWT

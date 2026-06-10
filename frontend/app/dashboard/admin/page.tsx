@@ -559,7 +559,6 @@ export default function AdminPage() {
                               disabled={busy !== null}
                               onChange={(e) => void patchUser(u.id, { role: e.target.value })}
                             >
-                              <option value="user">user</option>
                               <option value="analyst">analyst</option>
                               <option value="admin">admin</option>
                             </select>

@@ -18,7 +18,7 @@ export default function RegisterPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
-  const [role, setRole] = useState<AppRole>("user");
+  const [role, setRole] = useState<AppRole>("analyst");
   const [msg, setMsg] = useState("");
 
   useEffect(() => {
@@ -45,7 +45,7 @@ export default function RegisterPage() {
         return;
       }
       if (data.awaiting_approval) {
-        setMsg(data.message || "Access request submitted. Opening your cardholder workspace...");
+        setMsg(data.message || "Access request submitted. An administrator must approve your workspace.");
       }
 
       const loginRes = await fetch(`${getApiBase()}/auth/login`, {
@@ -76,7 +76,7 @@ export default function RegisterPage() {
   return (
     <AuthPageShell
       tall
-      title="Create account"
+      title="Request operations access"
       subtitle={
         <>
           Have an account?{" "}
@@ -134,25 +134,22 @@ export default function RegisterPage() {
             />
           </div>
           <div>
-            <label className={authLabelClass}>Access level</label>
+            <label className={authLabelClass}>Operations role</label>
             <select
               className={authFieldClass}
               value={role}
-              title="Choose a standard account or request elevated access"
+              title="Choose analyst or administrator access"
               onChange={(e) => setRole(e.target.value as AppRole)}
             >
-              <option value="user">{ROLE_LABELS.user}</option>
-              <option value="analyst">Request Analyst Access</option>
-              <option value="admin">Request Admin Access</option>
+              <option value="analyst">{ROLE_LABELS.analyst}</option>
+              <option value="admin">{ROLE_LABELS.admin}</option>
             </select>
-            {role === "analyst" || role === "admin" ? (
-              <p className="text-soft mt-1 text-[0.65rem] leading-snug">
-                You can use the cardholder workspace while an administrator reviews elevated access.
-              </p>
-            ) : null}
+            <p className="text-soft mt-1 text-[0.65rem] leading-snug">
+              New accounts require administrator approval before accessing the fraud operations console.
+            </p>
           </div>
           <button type="submit" className={authBtnClass}>
-            Create account
+            Submit access request
           </button>
           {msg ? <p className="text-soft line-clamp-2 text-[0.65rem]">{msg}</p> : null}
           <button
@@ -166,7 +163,8 @@ export default function RegisterPage() {
       ) : (
         <div className="space-y-4 py-2">
           <p className="text-soft text-xs leading-relaxed">
-            Social sign-in creates a cardholder account. Use Email to request analyst or admin access.
+            Social sign-in creates a pending analyst workspace. An administrator must approve access before you can
+            ingest or investigate transactions.
           </p>
           <SocialLoginButtons />
         </div>

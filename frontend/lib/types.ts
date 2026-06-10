@@ -102,10 +102,13 @@ export type FraudSimulateResponse = {
   risk_score: number;
   label: string;
   ml_probability: number;
+  cnn_probability?: number;
+  autoencoder_score?: number;
+  model_family?: string;
   confidence: number;
   reasons: string[];
   narrative: string;
-  feature_importance: { feature: string; contribution: number; direction: string }[];
+  feature_importance: { feature: string; contribution: number; direction: string; source?: string }[];
   scores: { rules: number; behavior: number; ml: number };
   persisted?: boolean;
   transaction_id?: number;
@@ -117,6 +120,9 @@ export type ExplainTransactionResponse = {
   risk_score?: number;
   status: string;
   ml_probability?: number;
+  cnn_probability?: number;
+  autoencoder_score?: number;
+  model_family?: string;
   decision_label?: string;
   stored_reasons?: string[];
   feature_importance?: { feature: string; contribution: number; direction: string }[];

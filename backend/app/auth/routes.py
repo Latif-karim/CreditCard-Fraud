@@ -11,7 +11,7 @@ from ..services.user_access import effective_role, requires_approval
 
 auth_bp = Blueprint("auth", __name__, url_prefix="/auth")
 
-_ALLOWED_REGISTER_ROLES = frozenset({"user", "analyst", "admin"})
+_ALLOWED_REGISTER_ROLES = frozenset({"analyst", "admin"})
 _APPROVAL_REQUIRED_ROLES = frozenset({"analyst", "admin"})
 
 
@@ -26,7 +26,7 @@ def _effective_role(user: User) -> str:
 @auth_bp.post("/register")
 def register():
     data = RegisterSchema().load(request.get_json() or {})
-    role = (data.get("role") or "user").lower()
+    role = (data.get("role") or "analyst").lower()
     if role not in _ALLOWED_REGISTER_ROLES:
         return jsonify({"error": "Invalid role for self-registration"}), 400
     if User.query.filter_by(email=data["email"]).first():
@@ -47,7 +47,7 @@ def register():
         jsonify(
             {
                 "message": (
-                    "Access request submitted. You can use the cardholder workspace while an administrator reviews your request."
+                    "Access request submitted. An administrator must approve your fraud operations workspace."
                     if awaiting_approval
                     else "Account created successfully. Please verify your email to activate your account."
                 ),
