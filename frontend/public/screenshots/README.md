@@ -1,7 +1,9 @@
 # Landing page screenshot
 
-Save a dashboard capture as:
+Save a dashboard or landing capture as:
 
 `frontend/public/screenshots/dashboard-preview.png`
 
-Recommended size: 1200×675 (16:9) or larger. The home page product section uses this file when present.
+Recommended size: 1440×900 or larger (16:9). The home page product section uses this file when present.
+
+For the full project report, use the filenames in `scripts/doc_assets/screenshots/README.md`.

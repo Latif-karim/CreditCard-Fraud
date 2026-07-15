@@ -13,6 +13,7 @@ def ingest_transaction_data(
     *,
     actor_user_id: int | None = None,
     quiet: bool = False,
+    commit: bool = True,
 ) -> dict:
     """Score and persist one transaction. Returns API payload."""
     user_id = int(data["user_id"])
@@ -93,20 +94,24 @@ def ingest_transaction_data(
             )
         )
 
-    db.session.commit()
-    invalidate_read_caches(user_id)
+    if commit:
+        db.session.commit()
+        invalidate_read_caches(user_id)
+    else:
+        db.session.flush()
 
     notification = None
-    if result.final_score >= 60 and not quiet:
+    if commit and result.final_score >= 60 and not quiet:
         notification = (
             FraudNotification.query.filter_by(transaction_id=tx.id)
             .order_by(FraudNotification.id.desc())
             .first()
         )
 
-    from .live_payloads import publish_transaction_created
+    if commit and not quiet:
+        from .live_payloads import publish_transaction_created
 
-    publish_transaction_created(tx, notification)
+        publish_transaction_created(tx, notification)
 
     return {
         "transaction_id": tx.id,

@@ -1,6 +1,6 @@
 # Fraud Detection Backend (Flask)
 
-Enterprise-style API for credit card fraud detection: JWT auth (roles **admin**, **analyst**), transaction ingest and monitoring, **deep learning hybrid scoring** (1D-CNN + autoencoder), explainability hooks, alerts, admin, reports, and audit trails.
+Enterprise-style API for credit card fraud detection: JWT auth (roles **admin**, **analyst**), transaction ingest and monitoring, **hybrid deep learning scoring** (1D-CNN + autoencoder + live feature scorer), explainability, alerts, admin, reports, and audit trails.
 
 ## Quick start
 
@@ -8,11 +8,9 @@ Enterprise-style API for credit card fraud detection: JWT auth (roles **admin**,
 2. Copy `.env.example` to `.env`
 3. Configure the database:
 
-- Local fallback: leave `DATABASE_URL` empty to use SQLite.
-- Neon/PostgreSQL: set `DATABASE_URL` in `backend/.env` to your Neon pooled connection string, including `sslmode=require`.
+- **Local fallback:** leave `DATABASE_URL` empty to use SQLite.
+- **Neon/PostgreSQL:** set `DATABASE_URL` in `backend/.env` to your Neon pooled connection string, including `sslmode=require`.
 - Demo data auto-seeding is disabled by default for Neon/PostgreSQL. Set `AUTO_SEED_DEMO_DATA=true` only if you intentionally want startup seeding.
-
-Example:
 
 ```bash
 DATABASE_URL=<your-neon-pooled-postgresql-url>
@@ -24,125 +22,171 @@ DATABASE_URL=<your-neon-pooled-postgresql-url>
 flask --app run db upgrade
 ```
 
-If this is a fresh clone after new migrations were added, generate/apply migrations as usual (`db migrate` / `db upgrade`).
-
-5. Run: `python run.py` (CORS enabled for local Next.js.)
+5. Bootstrap or train ML models (see below), then run: `python run.py`
 
 ## Roles
 
-- **admin** — user/rule management, model retrain, full audit exports  
-- **analyst** — dashboards, monitoring, fraud lab, explainability  
+- **admin** — user/rule management, model retrain, reseed, full audit exports
+- **analyst** — dashboards, monitoring, fraud lab, explainability, ingest
 
-Self-registration creates an access request (`approved=false`). The fraud operations console remains locked until an administrator approves the account.
+Self-registration creates an access request (`approved=false`). The operations console remains locked until an administrator approves the account.
+
+> The **cardholder** role was removed. FraudShield is an internal fraud-operations platform.
 
 ## Deep learning models
 
-Bootstrap synthetic training (no Kaggle file required):
+### Architecture
+
+| Component | File | Purpose |
+|-----------|------|---------|
+| 1D-CNN classifier | `fraud_cnn.keras` | Supervised fraud probability on 31 features |
+| Autoencoder | `fraud_autoencoder.keras` | Unsupervised anomaly on legitimate traffic |
+| Feature scaler | `feature_scaler.joblib` | StandardScaler fit on training data |
+| Metrics | `metrics.json` | ROC-AUC, PR-AUC, recall, precision |
+| Manifest | `model_manifest.json` | Architecture metadata, AE threshold |
+
+**Offline fusion:** `0.75 × CNN + 0.25 × autoencoder reconstruction score`
+
+**Live runtime:** when proxy features diverge from Kaggle PCA space, `live_fraud_probability()` in `ml/features.py` provides calibrated scoring from merchant category, geo risk, amount, velocity, and user baseline.
+
+### Bootstrap (no Kaggle file)
 
 ```bash
 python ml/bootstrap_model.py
 ```
 
-Train on the European benchmark dataset:
+### Train on European benchmark
 
 ```bash
-python ml/train_model.py --dataset path/to/creditcard.csv
+python ml/train_model.py --dataset ml/data/creditcard.csv
 ```
 
-Artifacts are written to `ml/artifacts/` (`fraud_cnn.keras`, `fraud_autoencoder.keras`, `feature_scaler.joblib`, `metrics.json`).
+Dataset: [Kaggle Credit Card Fraud Detection](https://www.kaggle.com/datasets/mlg-ulb/creditcardfraud) — place `creditcard.csv` under `backend/ml/data/`.
+
+**Typical held-out metrics:** ROC-AUC ~0.98 · PR-AUC ~0.69 · Recall ~0.89 · Precision ~0.11
+
+Artifacts are written to `ml/artifacts/`. Runtime loads Keras models in `app/fraud/model.py`. The legacy `fraud_model.joblib` (Random Forest) is no longer used.
+
+### Scoring pipeline
+
+```
+final_score = MIN(100, rule_score + behavior_score + ml_score)
+status      = "flagged" if final_score >= 60
+confidence  = ml_probability (0–1)
+```
+
+| Layer | Max contribution | Source |
+|-------|------------------|--------|
+| Rules | ~30 | Amount, velocity, location mismatch |
+| Behavior | ~30 | User avg spend, location history |
+| ML | ~40 | CNN + AE hybrid or live feature scorer |
+
+## Reseed database
+
+Purges **all** previous transactions, fraud decisions, disputes, alerts, and notifications; re-seeds through the live ingest pipeline:
+
+```bash
+# CLI
+python -c "from app import create_app; from app.services.seed_data import reseed_realistic_demo_data; app=create_app();
+with app.app_context(): print(reseed_realistic_demo_data(min_transactions=80))"
+```
+
+```http
+POST /transactions/seed?force=true&min=80
+Authorization: Bearer <staff-jwt>
+```
+
+Each seeded transaction runs rules + behavior + ML scoring. Reseed takes several minutes (~80 ML inferences). Progress prints every 10 transactions.
 
 ## Auth
 
 | Method | Path | Notes |
 |--------|------|--------|
-| POST | `/auth/register` | Body: `email`, `password` (8+), optional `full_name`, `role` in `analyst` \| `admin`; requires approval |
+| POST | `/auth/register` | `role` in `analyst` \| `admin`; requires approval |
 | POST | `/auth/login` | Returns JWT + `role` |
 | POST | `/auth/forgot-password` | OTP stored; in **debug**, response may include `dev_otp` |
 | POST | `/auth/verify-otp` | `{ email, otp }` → `{ valid }` |
 | POST | `/auth/reset-password` | `{ email, otp, new_password }` |
-| POST | `/auth/verify-email` | JWT — marks `email_verified` (demo) |
 | GET | `/auth/me` | JWT — profile |
-| GET | `/auth/google`, `/auth/github` | OAuth redirect (requires `.env` client IDs) |
+| GET | `/auth/google`, `/auth/github` | OAuth redirect |
 | GET | `/auth/oauth/providers` | Which social providers are configured |
-
-### Google / GitHub sign-in troubleshooting (Windows)
-
-OAuth uses **plain `requests`** (no Authlib). Set in `backend/.env`:
-
-- Copy `backend/.env.example` to `backend/.env` and fill provider credentials. Empty credentials make the frontend show social sign-in as unavailable.
-- `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` — redirect URI `http://127.0.0.1:5000/auth/google/callback`
-- `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` — callback `http://127.0.0.1:5000/auth/github/callback`
-- Copy `frontend/.env.local.example` to `frontend/.env.local` if the API is not running at the default `http://127.0.0.1:5000`.
-- **`OAUTH_SSL_VERIFY=false`** if you see `CERTIFICATE_VERIFY_FAILED` in local development
-- **`getaddrinfo failed`:** check internet/DNS/VPN
 
 ## Transactions
 
 | Method | Path | Notes |
 |--------|------|--------|
-| POST | `/transactions/ingest` | JWT; optional `country`, `card_type`, `ip_address`, `device_id`, … |
-| GET | `/transactions/flagged` | JWT |
-| GET | `/transactions/list` | JWT; query: `page`, `per_page`, `q`, `status`, `risk_min`, `risk_max`, `country`, `merchant`, `date_from`, `date_to`, `sort` |
+| POST | `/transactions/ingest` | Staff JWT; `user_id`, `amount`, `location`, optional merchant/geo/device |
+| GET | `/transactions/flagged` | Last 100 flagged |
+| GET | `/transactions/list` | Filters: `status`, `risk_min`, `q`, pagination |
 | PATCH | `/transactions/<id>/action` | `{ action: flag \| approve \| safe \| freeze_account }` |
-| DELETE | `/admin/transactions/<id>` | Admin only — remove one transaction and related records |
-| GET | `/admin/transactions` | Admin only — paginated transaction list for maintenance UI |
-
-## Dashboard (JWT; `user` / `analyst` / `admin` for reads)
-
-- `GET /dashboard/overview` — KPIs including `active_users`, `revenue_protected`  
-- `GET /dashboard/trends`, `fraud-vs-legit`, `risk-distribution`, `top-locations`  
-- `GET /dashboard/fraud-by-region`, `fraud-by-card`  
-- `GET /dashboard/recent-transactions`, `live-activity`, `heatmap`, `model-metrics`  
-- `GET /dashboard/audit-logs`  
-- `GET /dashboard/rules` — **admin only**
+| POST | `/transactions/seed` | `?force=true` purges + reseeds; `?min=80` |
+| GET | `/transactions/stream` | SSE live feed |
+| POST | `/transactions/simulator/start` | `{ interval_seconds: 30 }` |
+| POST | `/transactions/simulator/tick` | One synthetic transaction |
 
 ## Fraud & explainability
 
-- `POST /fraud/simulate` — manual scoring + approximate feature attribution (no DB write unless you extend)  
-- `GET /fraud/explain/<transaction_id>` — stored decision + feature ranking approximation  
+| Method | Path | Notes |
+|--------|------|--------|
+| POST | `/fraud/simulate` | Dry-run scoring; `persist: true` to save |
+| GET | `/fraud/explain/<transaction_id>` | Feature attribution + decision breakdown |
 
-## Alerts
+Response includes `cnn_probability`, `autoencoder_score`, `ml_probability`, `model_family` (`deep_learning_hybrid` or `live_feature_scorer`).
 
-- `GET /alerts/notifications` — in-app fraud notifications (seeded on first load)  
-- `PATCH /alerts/notifications/<id>/read`  
-- `GET /alerts/email-log`  
+## Dashboard (JWT; analyst/admin)
+
+- `GET /dashboard/overview` — KPIs
+- `GET /dashboard/trends`, `fraud-vs-legit`, `risk-distribution`, `top-locations`
+- `GET /dashboard/fraud-by-region`, `fraud-by-card`
+- `GET /dashboard/recent-transactions`, `live-activity`, `heatmap`, `model-metrics`
+- `GET /dashboard/audit-logs`
+- `GET /dashboard/rules` — **admin only**
 
 ## Admin (JWT **admin**)
 
-- `GET /admin/users`, `PATCH /admin/users/<id>`, `DELETE /admin/users/<id>` — manage users and their data
-- `POST /admin/users/<id>/approve`, `POST /admin/users/<id>/reject` — review analyst/admin access requests
-- `GET /admin/system/stats` — record counts for maintenance UI
-- `POST /admin/data/purge-transactions` — body `{ "confirm": "DELETE_ALL_TRANSACTIONS" }` wipes all transaction-related data
-- `PATCH /admin/rules/<id>` — toggle `FraudRule.enabled`
-- `POST /admin/models/retrain` — stub audit event
+| Method | Path | Notes |
+|--------|------|--------|
+| GET | `/admin/users` | List users |
+| PATCH | `/admin/users/<id>` | Update role, suspend |
+| POST | `/admin/users/<id>/approve` | Approve access request |
+| POST | `/admin/users/<id>/reject` | Reject access request |
+| PATCH | `/admin/rules/<id>` | Toggle `FraudRule.enabled` |
+| POST | `/admin/models/retrain` | Runs `ml/train_model.py`, reloads models |
+| POST | `/admin/data/purge-transactions` | `{ "confirm": "DELETE_ALL_TRANSACTIONS" }` |
+| POST | `/admin/data/reseed-realistic` | Purge + reseed |
 
 ## Reports
 
-- `GET /reports/transactions.csv`  
-- `GET /reports/summary.json`  
-- `GET /reports/summary.pdf` — JSON stub until PDF pipeline is wired  
-- `GET /reports/audit-export.json`  
+- `GET /reports/transactions.csv`
+- `GET /reports/summary.json`
+- `GET /reports/summary.pdf`
+- `GET /reports/audit-export.json`
 
-## Users / profile
+## Demo fraud attack (API)
 
-- `GET /users/me`, `PATCH /users/me`  
-- `POST /users/change-password`  
-- `GET /users/sessions`  
-- `POST /users/toggle-2fa`  
+```powershell
+# Login
+$login = Invoke-RestMethod -Method POST -Uri "http://127.0.0.1:5000/auth/login" `
+  -ContentType "application/json" `
+  -Body '{"email":"analyst@fraudshield.demo","password":"DemoPass123!"}'
 
-## ML training
-
-Dataset: [Kaggle Credit Card Fraud Detection](https://www.kaggle.com/datasets/mlg-ulb/creditcardfraud) — place `creditcard.csv` under `backend/ml/data/`.
-
-```bash
-python ml/train_model.py --dataset "C:\path\to\creditcard.csv"
+# Ingest suspicious transaction
+$h = @{ Authorization = "Bearer $($login.access_token)" }
+Invoke-RestMethod -Method POST -Uri "http://127.0.0.1:5000/transactions/ingest" `
+  -Headers $h -ContentType "application/json" `
+  -Body '{"user_id":1,"amount":6500,"location":"Lagos","country":"NG","merchant":"Binance","merchant_category":"crypto"}'
 ```
 
-Artifacts: `ml/artifacts/fraud_cnn.keras`, `fraud_autoencoder.keras`, `feature_scaler.joblib`, `metrics.json`. Runtime loads the Keras models in `app/fraud/model.py` when present.
+Expected: `status=flagged`, `risk_score>=60`, varied `confidence` (not a flat 25%).
 
 ## Next steps (production)
 
-- SMTP / SendGrid for real email; remove `dev_otp` leakage outside debug  
-- True SHAP / model explainers wired to `fraud/explain`  
-- Redis for rate limits and streaming ingestion  
-- Never store PAN/CVV; tokenize cards  
+- SMTP / SendGrid for real email alerts
+- SHAP / LIME wired to `fraud/explain`
+- Redis for rate limits and streaming ingestion
+- Sequence models (LSTM/GRU) for velocity patterns
+- Never store PAN/CVV; tokenize cards
+
+## Full documentation
+
+See **[DOCUMENTATION.md](../DOCUMENTATION.md)** for the complete project report including related works, methodology, and test results.

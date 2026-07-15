@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 from ..extensions import db
 from ..models import AuditLog, Transaction, User, UserProfile
 from .admin_maintenance import purge_all_transaction_data
+from .cache import invalidate_read_caches
 from .transaction_generator import (
     REALISTIC_FLAGGED_RATE,
     normal_transaction_payload,
@@ -116,6 +117,11 @@ def _apply_profiles_from_transactions(transactions: list[Transaction]) -> None:
 
 def seed_realistic_transactions(*, min_count: int = 80) -> int:
     """Seed transactions through the live ingest pipeline (rules + behavior + DL scoring)."""
+    from ..fraud.model import predict_fraud_probability
+
+    # Warm TensorFlow artifacts once so seeding does not reload models per transaction.
+    predict_fraud_probability(amount=50.0, tx_frequency_10m=0.0, minutes_since_last=9999.0)
+
     demo_ids = ensure_demo_users()
     account_ids = _account_holder_ids(demo_ids)
     if not account_ids:
@@ -143,6 +149,8 @@ def seed_realistic_transactions(*, min_count: int = 80) -> int:
             tx.created_at = created_at
             db.session.commit()
         seeded += 1
+        if seeded % 10 == 0:
+            print(f"  seeded {seeded}/{min_count}...", flush=True)
 
     if AuditLog.query.count() < 5:
         db.session.add(
@@ -157,7 +165,8 @@ def seed_realistic_transactions(*, min_count: int = 80) -> int:
         )
 
     db.session.commit()
-    return len(transactions)
+    invalidate_read_caches()
+    return seeded
 
 
 def seed_transactions_if_needed(*, min_count: int = 80) -> int:

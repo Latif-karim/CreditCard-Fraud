@@ -91,6 +91,74 @@ def build_training_frame(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series | No
     return working[FEATURE_COLUMNS], labels
 
 
+def live_fraud_probability(
+    *,
+    amount: float,
+    tx_frequency_10m: float,
+    minutes_since_last: float,
+    merchant_category: str = "",
+    country: str = "",
+    location: str = "",
+    amount_vs_avg: float = 1.0,
+    location_novel: bool = False,
+    device_id: str = "",
+    ip_address: str = "",
+) -> tuple[float, list[str]]:
+    """Interpretable live-domain fraud probability for runtime transactions (0–1).
+
+    Kaggle-trained CNN/AE models expect real PCA components; live ingest uses proxy
+    features. This scorer provides calibrated probabilities on operational metadata.
+    """
+    reasons: list[str] = []
+    score = 0.04
+
+    amt_log = amount_log(amount)
+    score += min(0.14, amt_log / 14.0)
+
+    if amount >= 5000:
+        score += 0.22
+        reasons.append("Live model: very high transaction amount")
+    elif amount >= 1500:
+        score += 0.10
+        reasons.append("Live model: elevated transaction amount")
+
+    mcc = _mcc_risk(merchant_category)
+    score += mcc * 0.22
+    if mcc >= 0.75:
+        reasons.append(f"Live model: high-risk merchant category ({merchant_category or 'unknown'})")
+
+    geo = _geo_risk(country, location)
+    score += geo * 0.18
+    if geo >= 0.6:
+        reasons.append("Live model: elevated geographic risk")
+
+    if location_novel:
+        score += 0.11
+        reasons.append("Live model: location outside user baseline")
+
+    if amount_vs_avg >= 2.5:
+        bump = min(0.16, (amount_vs_avg - 2.0) * 0.05)
+        score += bump
+        reasons.append("Live model: spend far above user average")
+
+    if tx_frequency_10m >= 5:
+        score += 0.14
+        reasons.append("Live model: high velocity in 10-minute window")
+    elif tx_frequency_10m >= 3:
+        score += 0.07
+
+    if minutes_since_last < 2:
+        score += min(0.08, max(0.0, (2.0 - minutes_since_last) * 0.05))
+
+    if device_id and len(device_id) > 4:
+        score += 0.03
+    if ip_address and not ip_address.startswith("10."):
+        score += 0.02
+
+    probability = float(np.clip(score, 0.02, 0.99))
+    return probability, reasons
+
+
 def build_live_vector(
     *,
     amount: float,
