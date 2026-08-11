@@ -27,7 +27,7 @@ export default function ForgotPasswordPage() {
     const data = await res.json();
     setMsg(
       data.message ||
-        "If an account exists for this email, you will receive a verification code shortly."
+        "If an account exists for this email, you will receive a verification code shortly.",
     );
   };
 
@@ -35,14 +35,22 @@ export default function ForgotPasswordPage() {
     <main className="min-h-screen px-4 py-10">
       <div className="mx-auto max-w-md">
         <div className="glass-card p-6">
-          <h1 className="text-2xl font-semibold text-slate-900 dark:text-white">Forgot password</h1>
+          <h1 className="text-2xl font-semibold text-slate-900 dark:text-white">
+            Forgot password
+          </h1>
           <p className="text-soft mt-2 text-sm">
             After submitting, use{" "}
-            <Link href="/verify-otp" className="text-sky-700 underline dark:text-sky-400">
+            <Link
+              href="/verify-otp"
+              className="text-sky-700 underline dark:text-sky-400"
+            >
               OTP verification
             </Link>{" "}
             then{" "}
-            <Link href="/reset-password" className="text-sky-700 underline dark:text-sky-400">
+            <Link
+              href="/reset-password"
+              className="text-sky-700 underline dark:text-sky-400"
+            >
               reset password
             </Link>
             .
@@ -56,12 +64,18 @@ export default function ForgotPasswordPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
             />
-            <button type="submit" className="w-full rounded-lg bg-slate-900 py-2 text-sm text-white dark:bg-white dark:text-slate-900">
+            <button
+              type="submit"
+              className="w-full rounded-lg bg-slate-900 py-2 text-sm text-white dark:bg-white dark:text-slate-900"
+            >
               Send OTP
             </button>
           </form>
           <p className="text-soft mt-3 text-sm">{msg}</p>
-          <Link href="/login" className="mt-4 inline-block text-sm text-sky-700 underline dark:text-sky-400">
+          <Link
+            href="/login"
+            className="mt-4 inline-block text-sm text-sky-700 underline dark:text-sky-400"
+          >
             Back to login
           </Link>
         </div>

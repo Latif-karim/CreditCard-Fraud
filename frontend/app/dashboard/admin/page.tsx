@@ -1,12 +1,25 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Cpu, Database, RefreshCw, ShieldCheck, Trash2, Users, XCircle } from "lucide-react";
+import {
+  Cpu,
+  Database,
+  RefreshCw,
+  ShieldCheck,
+  Trash2,
+  Users,
+  XCircle,
+} from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
 import { RoleGuard } from "@/components/role-guard";
 import { ListSkeleton, TableSkeleton } from "@/components/skeletons";
-import { deleteWithAuth, fetchWithAuth, patchWithAuth, postWithAuth } from "@/lib/api";
+import {
+  deleteWithAuth,
+  fetchWithAuth,
+  patchWithAuth,
+  postWithAuth,
+} from "@/lib/api";
 import type {
   AdminSystemStats,
   AdminTransactionRow,
@@ -37,7 +50,7 @@ export default function AdminPage() {
   const loadTransactions = useCallback(async (page = 1) => {
     const res = await fetchWithAuth<AdminTransactionsPage>(
       `/admin/transactions?page=${page}&per_page=25`,
-      token()
+      token(),
     );
     setTxData(res);
     setTxPage(page);
@@ -65,7 +78,9 @@ export default function AdminPage() {
     }
   }, [loadTransactions]);
 
-  const pendingRequests = users.filter((u) => (u.role === "analyst" || u.role === "admin") && !u.approved);
+  const pendingRequests = users.filter(
+    (u) => (u.role === "analyst" || u.role === "admin") && !u.approved,
+  );
 
   useEffect(() => {
     void loadAll();
@@ -104,12 +119,14 @@ export default function AdminPage() {
     setErr("");
     setOk("");
     try {
-      const res = await deleteWithAuth<{ message: string; transactions_removed: number }>(
-        `/admin/users/${u.id}`,
-        token()
-      );
+      const res = await deleteWithAuth<{
+        message: string;
+        transactions_removed: number;
+      }>(`/admin/users/${u.id}`, token());
       await loadAll();
-      setOk(`${res.message} (${res.transactions_removed} transactions removed).`);
+      setOk(
+        `${res.message} (${res.transactions_removed} transactions removed).`,
+      );
     } catch (e) {
       setErr((e as Error).message);
     } finally {
@@ -131,7 +148,7 @@ export default function AdminPage() {
       const res = await postWithAuth<{ message: string }>(
         `/admin/users/${u.id}/${decision}`,
         {},
-        token()
+        token(),
       );
       await loadAll();
       setOk(res.message);
@@ -148,10 +165,16 @@ export default function AdminPage() {
     setErr("");
     setOk("");
     try {
-      await deleteWithAuth<{ message: string }>(`/admin/transactions/${id}`, token());
+      await deleteWithAuth<{ message: string }>(
+        `/admin/transactions/${id}`,
+        token(),
+      );
       setDeleteTxId("");
       await loadTransactions(txPage);
-      const s = await fetchWithAuth<AdminSystemStats>("/admin/system/stats", token());
+      const s = await fetchWithAuth<AdminSystemStats>(
+        "/admin/system/stats",
+        token(),
+      );
       setStats(s);
       setOk(`Transaction #${id} deleted.`);
     } catch (e) {
@@ -168,7 +191,7 @@ export default function AdminPage() {
     }
     if (
       !window.confirm(
-        "This permanently deletes ALL transactions, fraud decisions, alerts, and notifications. User accounts are kept. Continue?"
+        "This permanently deletes ALL transactions, fraud decisions, alerts, and notifications. User accounts are kept. Continue?",
       )
     ) {
       return;
@@ -184,7 +207,9 @@ export default function AdminPage() {
       }>("/admin/data/purge-transactions", { confirm: PURGE_PHRASE }, token());
       setPurgeConfirm("");
       await loadAll();
-      setOk(`${res.message} (${res.transactions_removed} transactions removed).`);
+      setOk(
+        `${res.message} (${res.transactions_removed} transactions removed).`,
+      );
     } catch (e) {
       setErr((e as Error).message);
     } finally {
@@ -196,7 +221,7 @@ export default function AdminPage() {
     const min = Math.max(20, Math.min(500, Number(reseedCount) || 80));
     if (
       !window.confirm(
-        `Replace all transaction data with ${min} realistic demo transactions (~4% flagged)? User accounts are kept.`
+        `Replace all transaction data with ${min} realistic demo transactions (~4% flagged)? User accounts are kept.`,
       )
     ) {
       return;
@@ -215,19 +240,24 @@ export default function AdminPage() {
       }>("/admin/data/reseed-realistic", { min_transactions: min }, token());
 
       if (!res.transactions_added || !res.transaction_total) {
-        setErr("Reseed finished but no transactions were saved. Check backend logs and try again.");
+        setErr(
+          "Reseed finished but no transactions were saved. Check backend logs and try again.",
+        );
         return;
       }
 
       const [s, txRes] = await Promise.all([
         fetchWithAuth<AdminSystemStats>("/admin/system/stats", token()),
-        fetchWithAuth<AdminTransactionsPage>("/admin/transactions?page=1&per_page=25", token()),
+        fetchWithAuth<AdminTransactionsPage>(
+          "/admin/transactions?page=1&per_page=25",
+          token(),
+        ),
       ]);
       setStats(s);
       setTxData(txRes);
       setTxPage(1);
       setOk(
-        `${res.message}: ${res.transaction_total} transactions, ${res.flagged_transactions} flagged (${(res.flagged_rate * 100).toFixed(1)}%).`
+        `${res.message}: ${res.transaction_total} transactions, ${res.flagged_transactions} flagged (${(res.flagged_rate * 100).toFixed(1)}%).`,
       );
     } catch (e) {
       setErr((e as Error).message);
@@ -257,7 +287,10 @@ export default function AdminPage() {
 
   return (
     <RoleGuard allow={["admin"]} title="Administration">
-      <AppShell title="Administration" subtitle="Users, rules, and platform maintenance">
+      <AppShell
+        title="Administration"
+        subtitle="Users, rules, and platform maintenance"
+      >
         {loading ? (
           <div className="space-y-4">
             <TableSkeleton rows={5} cols={5} />
@@ -277,14 +310,14 @@ export default function AdminPage() {
             ) : null}
 
             <div className="mb-4 flex flex-wrap gap-2">
-              <button
+              {/* <button
                 type="button"
                 onClick={() => void retrain()}
                 className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm text-white dark:bg-white dark:text-slate-900"
               >
                 <Cpu className="h-4 w-4" />
                 Queue model retrain
-              </button>
+              </button> */}
             </div>
 
             <div className="glass-card mb-4 p-4">
@@ -293,7 +326,8 @@ export default function AdminPage() {
                 Pending requests
               </h3>
               <p className="text-soft mb-3 text-xs">
-                Analyst and administrator access requests (from registration or profile) appear here until reviewed.
+                Analyst and administrator access requests (from registration or
+                profile) appear here until reviewed.
               </p>
               {pendingRequests.length ? (
                 <div className="overflow-x-auto">
@@ -308,8 +342,13 @@ export default function AdminPage() {
                     </thead>
                     <tbody>
                       {pendingRequests.map((u) => (
-                        <tr key={u.id} className="border-t border-slate-100 dark:border-slate-800">
-                          <td className="py-2 pr-3">{u.full_name || "Not provided"}</td>
+                        <tr
+                          key={u.id}
+                          className="border-t border-slate-100 dark:border-slate-800"
+                        >
+                          <td className="py-2 pr-3">
+                            {u.full_name || "Not provided"}
+                          </td>
                           <td className="py-2 pr-3">{u.email}</td>
                           <td className="py-2 pr-3 capitalize">{u.role}</td>
                           <td className="py-2">
@@ -368,18 +407,26 @@ export default function AdminPage() {
                       key={label}
                       className="rounded-lg border border-slate-200 bg-white/60 px-3 py-2 dark:border-slate-800 dark:bg-slate-950/40"
                     >
-                      <p className="text-soft text-[10px] uppercase tracking-wide">{label}</p>
-                      <p className="text-lg font-semibold">{value.toLocaleString()}</p>
+                      <p className="text-soft text-[10px] uppercase tracking-wide">
+                        {label}
+                      </p>
+                      <p className="text-lg font-semibold">
+                        {value.toLocaleString()}
+                      </p>
                     </div>
                   ))}
                 </div>
               ) : null}
               <div className="mb-6 rounded-xl border border-sky-200 bg-sky-50/60 p-4 dark:border-sky-900 dark:bg-sky-950/30">
-                <p className="text-sm font-medium text-slate-900 dark:text-white">Reseed realistic demo data</p>
+                <p className="text-sm font-medium text-slate-900 dark:text-white">
+                  Reseed realistic demo data
+                </p>
                 <p className="text-soft mt-1 text-xs leading-relaxed">
-                  Clears all transactions and loads spread-out historical activity with a typical ~4% flagged rate.
-                  Use this if dashboard KPIs look inflated from old bulk seeding. On Neon/cloud Postgres this can
-                  take 1–2 minutes — keep the page open until you see a success or error message.
+                  Clears all transactions and loads spread-out historical
+                  activity with a typical ~4% flagged rate. Use this if
+                  dashboard KPIs look inflated from old bulk seeding. On
+                  Neon/cloud Postgres this can take 1–2 minutes — keep the page
+                  open until you see a success or error message.
                 </p>
                 <div className="mt-3 flex flex-wrap items-end gap-3">
                   <label className="text-soft block text-xs">
@@ -399,18 +446,26 @@ export default function AdminPage() {
                     onClick={() => void reseedRealistic()}
                     className="inline-flex items-center gap-2 rounded-lg bg-sky-700 px-4 py-2 text-sm font-medium text-white hover:bg-sky-800 disabled:opacity-50 dark:bg-sky-600 dark:hover:bg-sky-500"
                   >
-                    <RefreshCw className={`h-4 w-4 ${busy === "reseed" ? "animate-spin" : ""}`} />
-                    {busy === "reseed" ? "Reseeding…" : "Reseed realistic demo data"}
+                    <RefreshCw
+                      className={`h-4 w-4 ${busy === "reseed" ? "animate-spin" : ""}`}
+                    />
+                    {busy === "reseed"
+                      ? "Reseeding…"
+                      : "Reseed realistic demo data"}
                   </button>
                 </div>
               </div>
               <p className="text-soft mb-3 text-xs leading-relaxed">
-                Remove all transaction history, fraud scores, alerts, and in-app notifications. User accounts,
-                fraud rules, and audit logs are preserved.
+                Remove all transaction history, fraud scores, alerts, and in-app
+                notifications. User accounts, fraud rules, and audit logs are
+                preserved.
               </p>
               <label className="text-soft block text-xs">
-                Type <code className="rounded bg-slate-100 px-1 dark:bg-slate-800">{PURGE_PHRASE}</code> to
-                enable
+                Type{" "}
+                <code className="rounded bg-slate-100 px-1 dark:bg-slate-800">
+                  {PURGE_PHRASE}
+                </code>{" "}
+                to enable
               </label>
               <input
                 className="input-fintech mt-1 max-w-md"
@@ -436,8 +491,8 @@ export default function AdminPage() {
                 Remove transactions
               </h3>
               <p className="text-soft mb-3 shrink-0 text-xs">
-                Delete individual records here. Analyst pages cannot remove transactions — use this console
-                only.
+                Delete individual records here. Analyst pages cannot remove
+                transactions — use this console only.
               </p>
               <div className="mb-3 flex shrink-0 flex-wrap items-end gap-2">
                 <label className="text-soft block text-xs">
@@ -473,13 +528,20 @@ export default function AdminPage() {
                   </thead>
                   <tbody>
                     {(txData?.items ?? []).map((tx: AdminTransactionRow) => (
-                      <tr key={tx.id} className="border-t border-slate-100 dark:border-slate-800">
-                        <td className="py-2 pr-3 font-mono text-xs">#{tx.id}</td>
+                      <tr
+                        key={tx.id}
+                        className="border-t border-slate-100 dark:border-slate-800"
+                      >
+                        <td className="py-2 pr-3 font-mono text-xs">
+                          #{tx.id}
+                        </td>
                         <td className="py-2 pr-3">{tx.user_id}</td>
                         <td className="py-2 pr-3">${tx.amount.toFixed(2)}</td>
                         <td className="py-2 pr-3">{tx.location}</td>
                         <td className="py-2 pr-3 capitalize">{tx.status}</td>
-                        <td className="py-2 pr-3">{tx.risk_score.toFixed(1)}</td>
+                        <td className="py-2 pr-3">
+                          {tx.risk_score.toFixed(1)}
+                        </td>
                         <td className="py-2">
                           <button
                             type="button"
@@ -495,7 +557,9 @@ export default function AdminPage() {
                   </tbody>
                 </table>
                 {!txData?.items.length ? (
-                  <p className="text-soft py-4 text-sm">No transactions in the database.</p>
+                  <p className="text-soft py-4 text-sm">
+                    No transactions in the database.
+                  </p>
                 ) : null}
               </div>
               {txData && txData.pages > 1 ? (
@@ -545,11 +609,16 @@ export default function AdminPage() {
                     {users.map((u) => {
                       const isSelf = selfId === u.id;
                       return (
-                        <tr key={u.id} className="border-t border-slate-100 dark:border-slate-800">
+                        <tr
+                          key={u.id}
+                          className="border-t border-slate-100 dark:border-slate-800"
+                        >
                           <td className="py-2">
                             {u.email}
                             {isSelf ? (
-                              <span className="text-soft ml-1 text-[10px]">(you)</span>
+                              <span className="text-soft ml-1 text-[10px]">
+                                (you)
+                              </span>
                             ) : null}
                           </td>
                           <td className="py-2">
@@ -557,7 +626,9 @@ export default function AdminPage() {
                               className="rounded border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900"
                               value={u.role}
                               disabled={busy !== null}
-                              onChange={(e) => void patchUser(u.id, { role: e.target.value })}
+                              onChange={(e) =>
+                                void patchUser(u.id, { role: e.target.value })
+                              }
                             >
                               <option value="analyst">analyst</option>
                               <option value="admin">admin</option>
@@ -581,14 +652,22 @@ export default function AdminPage() {
                                 type="button"
                                 disabled={busy !== null}
                                 className="text-xs text-sky-700 underline dark:text-sky-400"
-                                onClick={() => void patchUser(u.id, { is_active: !u.is_active })}
+                                onClick={() =>
+                                  void patchUser(u.id, {
+                                    is_active: !u.is_active,
+                                  })
+                                }
                               >
                                 {u.is_active ? "Suspend" : "Activate"}
                               </button>
                               <button
                                 type="button"
                                 disabled={busy !== null || isSelf}
-                                title={isSelf ? "Cannot delete your own account" : "Delete user permanently"}
+                                title={
+                                  isSelf
+                                    ? "Cannot delete your own account"
+                                    : "Delete user permanently"
+                                }
                                 onClick={() => void deleteUser(u)}
                                 className="inline-flex items-center gap-1 rounded-md border border-red-200 px-2 py-0.5 text-xs font-medium text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950/50"
                               >
