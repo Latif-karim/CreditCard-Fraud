@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { KeyRound, ShieldCheck, Smartphone, UserCog } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
@@ -29,6 +30,7 @@ type Session = {
 };
 
 export default function ProfilePage() {
+  const router = useRouter();
   const [me, setMe] = useState<Me | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [name, setName] = useState("");
@@ -38,14 +40,19 @@ export default function ProfilePage() {
   const [newPw, setNewPw] = useState("");
   const [msg, setMsg] = useState("");
   const [loading, setLoading] = useState(true);
-  const [requestRole, setRequestRole] = useState<"analyst" | "admin">("analyst");
+  const [requestRole, setRequestRole] = useState<"analyst" | "admin">(
+    "analyst",
+  );
   const [requestNote, setRequestNote] = useState("");
   const [requestBusy, setRequestBusy] = useState(false);
 
   const profileDirty = name.trim() !== savedName.trim();
   const pendingRole = me?.requested_role;
   const hasElevatedAccess =
-    (me?.stored_role === "analyst" || me?.stored_role === "admin" || me?.role === "analyst" || me?.role === "admin") &&
+    (me?.stored_role === "analyst" ||
+      me?.stored_role === "admin" ||
+      me?.role === "analyst" ||
+      me?.role === "admin") &&
     me?.approved !== false &&
     !pendingRole;
 
@@ -55,7 +62,9 @@ export default function ProfilePage() {
     try {
       const [m, s] = await Promise.all([
         fetchWithAuth<Me>("/users/me", token).catch(() => null),
-        fetchWithAuth<Session[]>("/users/sessions", token).catch(() => [] as Session[]),
+        fetchWithAuth<Session[]>("/users/sessions", token).catch(
+          () => [] as Session[],
+        ),
       ]);
       if (m) {
         setMe(m);
@@ -99,11 +108,17 @@ export default function ProfilePage() {
 
   const changePw = async () => {
     const token = localStorage.getItem("access_token") || "";
+
     try {
-      await postWithAuth("/users/change-password", { current_password: cur, new_password: newPw }, token);
+      await postWithAuth(
+        "/users/change-password",
+        { current_password: cur, new_password: newPw },
+        token,
+      );
       setMsg("Password updated");
       setCur("");
       setNewPw("");
+      router.push("/login");
     } catch (e) {
       setMsg((e as Error).message);
     }
@@ -111,8 +126,14 @@ export default function ProfilePage() {
 
   const toggle2fa = async () => {
     const token = localStorage.getItem("access_token") || "";
-    const res = await postWithAuth<{ two_factor_enabled: boolean }>("/users/toggle-2fa", {}, token);
-    setMe((m) => (m ? { ...m, two_factor_enabled: res.two_factor_enabled } : m));
+    const res = await postWithAuth<{ two_factor_enabled: boolean }>(
+      "/users/toggle-2fa",
+      {},
+      token,
+    );
+    setMe((m) =>
+      m ? { ...m, two_factor_enabled: res.two_factor_enabled } : m,
+    );
     setMsg("Two-factor authentication updated.");
   };
 
@@ -121,10 +142,13 @@ export default function ProfilePage() {
     setRequestBusy(true);
     setMsg("");
     try {
-      const res = await postWithAuth<{ message: string; requested_role: string }>(
+      const res = await postWithAuth<{
+        message: string;
+        requested_role: string;
+      }>(
         "/users/me/request-role",
         { role: requestRole, note: requestNote.trim() || undefined },
-        token
+        token,
       );
       setMsg(res.message);
       await loadProfile();
@@ -140,7 +164,11 @@ export default function ProfilePage() {
     setRequestBusy(true);
     setMsg("");
     try {
-      const res = await postWithAuth<{ message: string }>("/users/me/cancel-role-request", {}, token);
+      const res = await postWithAuth<{ message: string }>(
+        "/users/me/cancel-role-request",
+        {},
+        token,
+      );
       setMsg(res.message);
       await loadProfile();
     } catch (e) {
@@ -164,8 +192,8 @@ export default function ProfilePage() {
               </h3>
               {me ? (
                 <p className="text-soft text-xs">
-                  {me.email} · {ROLE_LABELS[me.role as AppRole] ?? me.role} · email verified:{" "}
-                  {me.email_verified ? "yes" : "no"}
+                  {me.email} · {ROLE_LABELS[me.role as AppRole] ?? me.role} ·
+                  email verified: {me.email_verified ? "yes" : "no"}
                 </p>
               ) : null}
               <label className="text-soft text-xs">Display name</label>
@@ -187,7 +215,9 @@ export default function ProfilePage() {
                   {saving ? "Saving…" : "Save profile"}
                 </button>
               ) : (
-                <p className="text-sm text-emerald-600 dark:text-emerald-400">Profile up to date</p>
+                <p className="text-sm text-emerald-600 dark:text-emerald-400">
+                  Profile up to date
+                </p>
               )}
             </div>
 
@@ -198,16 +228,24 @@ export default function ProfilePage() {
               </h3>
               {hasElevatedAccess ? (
                 <p className="text-sm text-slate-700 dark:text-slate-200">
-                  You have <strong>{ROLE_LABELS[me!.role as AppRole] ?? me!.role}</strong> access.{" "}
-                  {ROLE_DESCRIPTIONS[me!.role as AppRole]}
+                  You have{" "}
+                  <strong>
+                    {ROLE_LABELS[me!.role as AppRole] ?? me!.role}
+                  </strong>{" "}
+                  access. {ROLE_DESCRIPTIONS[me!.role as AppRole]}
                 </p>
               ) : pendingRole ? (
                 <div className="space-y-3">
                   <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
-                    <p className="font-medium">Pending {ROLE_LABELS[pendingRole as AppRole] ?? pendingRole} request</p>
+                    <p className="font-medium">
+                      Pending{" "}
+                      {ROLE_LABELS[pendingRole as AppRole] ?? pendingRole}{" "}
+                      request
+                    </p>
                     <p className="mt-1 text-xs opacity-90">
-                      An administrator must approve your request. The fraud operations console stays locked until
-                      approval. Sign out and back in after approval to unlock your workspace.
+                      An administrator must approve your request. The fraud
+                      operations console stays locked until approval. Sign out
+                      and back in after approval to unlock your workspace.
                     </p>
                   </div>
                   <button
@@ -222,20 +260,27 @@ export default function ProfilePage() {
               ) : (
                 <div className="space-y-3">
                   <p className="text-soft text-xs">
-                    Request analyst or administrator access for the fraud operations console. An admin will review
-                    your request before permissions are granted.
+                    Request analyst or administrator access for the fraud
+                    operations console. An admin will review your request before
+                    permissions are granted.
                   </p>
                   <label className="text-soft text-xs">Requested role</label>
                   <select
                     className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
                     value={requestRole}
-                    onChange={(e) => setRequestRole(e.target.value as "analyst" | "admin")}
+                    onChange={(e) =>
+                      setRequestRole(e.target.value as "analyst" | "admin")
+                    }
                   >
                     <option value="analyst">Fraud Analyst</option>
                     <option value="admin">Administrator</option>
                   </select>
-                  <p className="text-soft text-xs">{ROLE_DESCRIPTIONS[requestRole]}</p>
-                  <label className="text-soft text-xs">Note for administrator (optional)</label>
+                  <p className="text-soft text-xs">
+                    {ROLE_DESCRIPTIONS[requestRole]}
+                  </p>
+                  <label className="text-soft text-xs">
+                    Note for administrator (optional)
+                  </label>
                   <textarea
                     rows={3}
                     maxLength={500}
@@ -298,20 +343,29 @@ export default function ProfilePage() {
               </h3>
               <div className="grid gap-2 md:grid-cols-2">
                 {sessions.map((s) => (
-                  <div key={s.id} className="rounded-lg border border-slate-200 p-3 text-sm dark:border-slate-800">
+                  <div
+                    key={s.id}
+                    className="rounded-lg border border-slate-200 p-3 text-sm dark:border-slate-800"
+                  >
                     <p className="font-medium">{s.device_label}</p>
                     <p className="text-soft text-xs">
                       {s.ip_address} · {new Date(s.last_seen).toLocaleString()}
                     </p>
                     {s.is_current ? (
-                      <span className="mt-1 inline-block text-xs text-emerald-600">Current session</span>
+                      <span className="mt-1 inline-block text-xs text-emerald-600">
+                        Current session
+                      </span>
                     ) : null}
                   </div>
                 ))}
               </div>
             </div>
           </div>
-          {msg ? <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">{msg}</p> : null}
+          {msg ? (
+            <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">
+              {msg}
+            </p>
+          ) : null}
         </>
       )}
     </AppShell>

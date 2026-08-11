@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 
 from flask import Blueprint, current_app, jsonify, request
 from flask_jwt_extended import create_access_token, get_jwt_identity, jwt_required
-
+from ..services.email_service import send_password_reset_otp
 from ..extensions import db
 from ..models import PasswordResetToken, User
 from ..schemas import LoginSchema, RegisterSchema
@@ -108,13 +108,25 @@ def forgot_password():
 
     otp = f"{secrets.randbelow(900000) + 100000:06d}"
     expires = datetime.utcnow() + timedelta(minutes=15)
-    db.session.add(PasswordResetToken(email=email, otp_code=otp, expires_at=expires, used=False))
+
+    token = PasswordResetToken(
+        email=email,
+        otp_code=otp,
+        expires_at=expires,
+        used=False,
+    )
+
+    db.session.add(token)
     db.session.commit()
 
-    payload = {"message": "If an account exists for this email, a verification code was sent."}
-    if current_app.debug:
-        payload["dev_otp"] = otp
-    return jsonify(payload), 200
+    try:
+        send_password_reset_otp(email, otp)
+    except Exception:
+        current_app.logger.exception("Failed to send password reset email")
+
+    return jsonify({
+    "message": "If the email exists, instructions were sent."
+}), 200
 
 
 @auth_bp.post("/verify-otp")
