@@ -4,8 +4,9 @@ import type { Metadata } from "next";
 import { Providers } from "@/components/providers";
 
 export const metadata: Metadata = {
-  title: "FraudShield | Fraud Detection Platform",
-  description: "Enterprise credit card fraud detection, ML scoring, and operations console.",
+  title: "FraudShield ",
+  description:
+    "Enterprise credit card fraud detection, ML scoring, and operations console.",
 };
 
 export default function RootLayout({
